@@ -5,37 +5,49 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Collaborative Calendar</title>
     
+    <!-- Google Fonts - Noto Sans -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div class="container">
         <header>
-            <h1>Collaborative Calendar</h1>
-            <div class="user-section">
-                <label for="userName">Your Name:</label>
-                <input type="text" id="userName" placeholder="Enter your name..." />
-                <span id="userStatus" class="status"></span>
+            <div class="header-content">
+                <h1>Collaborative Calendar</h1>
+                <div class="user-section">
+                    <label for="userName">Your Name</label>
+                    <input type="text" id="userName" placeholder="Enter your name..." />
+                    <span id="userStatus" class="status"></span>
+                </div>
             </div>
         </header>
 
         <div class="calendar-controls">
             <div class="user-filters">
-                <h3>Show Calendars:</h3>
+                <h3>Show Calendars</h3>
                 <div id="userCheckboxes" class="checkbox-group">
                     <!-- User checkboxes will be populated here -->
                 </div>
-                <button id="refreshUsers" class="btn btn-small">Refresh Users</button>
+                <button id="refreshUsers" class="btn btn-small btn-outline">Refresh Users</button>
             </div>
             
             <div class="calendar-actions">
-                <button id="addEventBtn" class="btn btn-primary">Add Event</button>
+                <button id="addEventBtn" class="btn btn-primary">
+                    <span class="btn-icon">+</span>
+                    Add Event
+                </button>
                 <div class="connection-status">
                     <span id="connectionStatus" class="status">Connecting...</span>
                 </div>
             </div>
         </div>
 
-        <div id="calendar"></div>
+        <div class="calendar-wrapper">
+            <div id="calendar"></div>
+        </div>
     </div>
 
     <!-- Event Modal -->
@@ -48,23 +60,23 @@
             <div class="modal-body">
                 <form id="eventForm">
                     <div class="form-group">
-                        <label for="eventTitle">Title:</label>
-                        <input type="text" id="eventTitle" required>
+                        <label for="eventTitle">Event Title</label>
+                        <input type="text" id="eventTitle" placeholder="Enter event title..." required>
                     </div>
                     <div class="form-row">
                         <div class="form-group">
-                            <label for="eventStart">Start:</label>
+                            <label for="eventStart">Start Date & Time</label>
                             <input type="datetime-local" id="eventStart" required>
                         </div>
                         <div class="form-group">
-                            <label for="eventEnd">End:</label>
+                            <label for="eventEnd">End Date & Time</label>
                             <input type="datetime-local" id="eventEnd" required>
                         </div>
                     </div>
                     <div class="form-actions">
                         <button type="submit" class="btn btn-primary">Save Event</button>
                         <button type="button" id="deleteEventBtn" class="btn btn-danger" style="display: none;">Delete Event</button>
-                        <button type="button" class="btn btn-secondary" id="cancelBtn">Cancel</button>
+                        <button type="button" class="btn btn-outline" id="cancelBtn">Cancel</button>
                     </div>
                 </form>
             </div>
