@@ -1,10 +1,10 @@
 <?php
 /**
- * Updated REST API for calendar operations with authentication
+ * Refactored REST API Controller for Collaborative Calendar
  * Location: backend/api.php
  * 
- * Handles all CRUD operations for the collaborative calendar application
- * with user authentication and session management.
+ * Pure REST controller that delegates business logic to model classes.
+ * Handles HTTP routing, request/response formatting, and input validation.
  */
 
 header('Content-Type: application/json');
@@ -15,11 +15,20 @@ header('Access-Control-Allow-Credentials: true');
 
 require_once 'database/config.php';
 require_once 'auth/Auth.php';
+require_once 'models/User.php';
+require_once 'models/Event.php';
+require_once 'models/CalendarUpdate.php';
 
 $method = $_SERVER['REQUEST_METHOD'];
 
-// Initialize authentication
+// Initialize models
+$calendarUpdate = new CalendarUpdate($pdo);
+$userModel = new User($pdo, $calendarUpdate);
+$eventModel = new Event($pdo, $calendarUpdate);
 $auth = new Auth($pdo);
+
+// Initialize calendar updates system
+$calendarUpdate->initialize();
 
 // Handle preflight requests
 if ($method === 'OPTIONS') {
@@ -27,30 +36,78 @@ if ($method === 'OPTIONS') {
     exit();
 }
 
-// Error handling wrapper
+/**
+ * Error handling wrapper
+ */
 function handleRequest($callback) {
     try {
         $callback();
     } catch (Exception $e) {
         error_log("API Error: " . $e->getMessage());
-        http_response_code(500);
-        echo json_encode(['error' => 'Server error: ' . $e->getMessage()]);
+        
+        // Determine appropriate HTTP status code
+        $statusCode = 500;
+        if (strpos($e->getMessage(), 'not found') !== false) {
+            $statusCode = 404;
+        } elseif (strpos($e->getMessage(), 'required') !== false || 
+                  strpos($e->getMessage(), 'invalid') !== false ||
+                  strpos($e->getMessage(), 'missing') !== false) {
+            $statusCode = 400;
+        } elseif (strpos($e->getMessage(), 'permission') !== false ||
+                  strpos($e->getMessage(), 'own events') !== false ||
+                  strpos($e->getMessage(), 'unauthorized') !== false) {
+            $statusCode = 403;
+        }
+        
+        http_response_code($statusCode);
+        echo json_encode(['error' => $e->getMessage()]);
     }
 }
 
-handleRequest(function() use ($pdo, $method, $auth) {
+/**
+ * Send JSON response
+ */
+function sendResponse($data, $statusCode = 200) {
+    http_response_code($statusCode);
+    echo json_encode($data);
+}
+
+/**
+ * Get JSON input from request body
+ */
+function getJsonInput() {
+    $input = json_decode(file_get_contents('php://input'), true);
+    if (json_last_error() !== JSON_ERROR_NONE) {
+        throw new Exception('Invalid JSON input');
+    }
+    return $input;
+}
+
+/**
+ * Validate required fields in input
+ */
+function validateRequiredFields($input, $requiredFields) {
+    foreach ($requiredFields as $field) {
+        if (!isset($input[$field]) || (is_string($input[$field]) && trim($input[$field]) === '')) {
+            throw new Exception("Missing required field: {$field}");
+        }
+    }
+}
+
+// Route the request
+handleRequest(function() use ($pdo, $method, $auth, $userModel, $eventModel, $calendarUpdate) {
     switch ($method) {
         case 'GET':
-            handleGet($pdo, $auth);
+            handleGetRequest($auth, $userModel, $eventModel, $calendarUpdate);
             break;
         case 'POST':
-            handlePost($pdo, $auth);
+            handlePostRequest($auth, $userModel, $eventModel, $calendarUpdate);
             break;
         case 'PUT':
-            handlePut($pdo, $auth);
+            handlePutRequest($auth, $eventModel);
             break;
         case 'DELETE':
-            handleDelete($pdo, $auth);
+            handleDeleteRequest($auth, $eventModel);
             break;
         default:
             http_response_code(405);
@@ -58,169 +115,178 @@ handleRequest(function() use ($pdo, $method, $auth) {
     }
 });
 
-function handleGet($pdo, $auth) {
+/**
+ * Handle GET requests
+ */
+function handleGetRequest($auth, $userModel, $eventModel, $calendarUpdate) {
     $action = $_GET['action'] ?? '';
     
     switch ($action) {
         case 'check_auth':
-            // Check authentication status
             $authResult = $auth->checkAuth();
-            echo json_encode($authResult);
+            sendResponse($authResult);
             break;
             
         case 'users':
-            // Get all users (requires authentication)
-            $currentUser = $auth->requireAuth();
-            
-            $stmt = $pdo->query("SELECT id, name, color, created_at FROM users ORDER BY name");
-            echo json_encode($stmt->fetchAll());
+            $auth->requireAuth();
+            $users = $userModel->getAllUsers();
+            sendResponse($users);
             break;
-
-		case 'users_with_stats':
-			// Get all users with event statistics (requires authentication)
-			$currentUser = $auth->requireAuth();
-
-			try {
-				// Get all users
-				$stmt = $pdo->query("
-            SELECT
-                u.id,
-                u.name,
-                u.email,
-                u.color,
-                u.created_at,
-                u.last_login,
-                COUNT(e.id) as event_count
-            FROM users u
-            LEFT JOIN events e ON u.id = e.user_id
-            GROUP BY u.id, u.name, u.email, u.color, u.created_at, u.last_login
-            ORDER BY u.name ASC
-        ");
-
-				$users = $stmt->fetchAll();
-
-				// Format the data for better frontend consumption
-				$formattedUsers = array_map(function($user) {
-					// Determine user status based on last login
-					$status = 'new';
-					if ($user['last_login'] && $user['last_login'] !== '0000-00-00 00:00:00') {
-						$lastLogin = new DateTime($user['last_login']);
-						$now = new DateTime();
-						$daysDiff = $now->diff($lastLogin)->days;
-
-						if ($daysDiff <= 1) {
-							$status = 'active';
-						} else {
-							$status = 'inactive';
-						}
-					}
-
-					return [
-						'id' => (int)$user['id'],
-						'name' => $user['name'],
-						'email' => $user['email'],
-						'color' => $user['color'],
-						'created_at' => $user['created_at'],
-						'last_login' => $user['last_login'],
-						'event_count' => (int)$user['event_count'],
-						'status' => $status
-					];
-				}, $users);
-
-				echo json_encode($formattedUsers);
-			} catch (PDOException $e) {
-				error_log("Error fetching users with stats: " . $e->getMessage());
-				http_response_code(500);
-				echo json_encode(['error' => 'Failed to fetch users data']);
-			}
-			break;
+            
+        case 'users_with_stats':
+            $auth->requireAuth();
+            $users = $userModel->getAllUsersWithStats();
+            sendResponse($users);
+            break;
             
         case 'events':
-            // Get events (requires authentication)
-            $currentUser = $auth->requireAuth();
+            $auth->requireAuth();
             
             $userIds = $_GET['user_ids'] ?? '';
+            $userIdsArray = null;
+            
             if ($userIds) {
-                $userIds = array_filter(explode(',', $userIds), 'is_numeric');
-                if (empty($userIds)) {
-                    echo json_encode([]);
+                $userIdsArray = array_filter(explode(',', $userIds), 'is_numeric');
+                if (empty($userIdsArray)) {
+                    sendResponse([]);
                     return;
                 }
-                
-                $placeholders = str_repeat('?,', count($userIds) - 1) . '?';
-                $stmt = $pdo->prepare("
-                    SELECT e.*, u.name as user_name, u.color as user_color 
-                    FROM events e 
-                    JOIN users u ON e.user_id = u.id 
-                    WHERE e.user_id IN ($placeholders)
-                    ORDER BY e.start_datetime
-                ");
-                $stmt->execute($userIds);
-            } else {
-                $stmt = $pdo->query("
-                    SELECT e.*, u.name as user_name, u.color as user_color 
-                    FROM events e 
-                    JOIN users u ON e.user_id = u.id 
-                    ORDER BY e.start_datetime
-                ");
             }
             
-            $events = $stmt->fetchAll();
+            $events = $eventModel->getAllEvents($userIdsArray);
+            sendResponse($events);
+            break;
             
-            // Format for FullCalendar
-            $formattedEvents = array_map(function($event) {
-                return [
-                    'id' => $event['id'],
-                    'title' => $event['title'],
-                    'start' => $event['start_datetime'],
-                    'end' => $event['end_datetime'],
-                    'backgroundColor' => $event['user_color'],
-                    'borderColor' => $event['user_color'],
-                    'extendedProps' => [
-                        'userId' => $event['user_id'],
-                        'userName' => $event['user_name']
-                    ]
-                ];
-            }, $events);
+        case 'events_by_user':
+            $auth->requireAuth();
             
-            echo json_encode($formattedEvents);
+            $userId = $_GET['user_id'] ?? null;
+            if (!$userId || !is_numeric($userId)) {
+                throw new Exception('Valid user_id parameter is required');
+            }
+            
+            $startDate = $_GET['start_date'] ?? null;
+            $endDate = $_GET['end_date'] ?? null;
+            
+            $events = $eventModel->getEventsByUserId($userId, $startDate, $endDate);
+            sendResponse($events);
+            break;
+            
+        case 'events_range':
+            $auth->requireAuth();
+            
+            $startDate = $_GET['start_date'] ?? null;
+            $endDate = $_GET['end_date'] ?? null;
+            
+            if (!$startDate || !$endDate) {
+                throw new Exception('start_date and end_date parameters are required');
+            }
+            
+            $userIds = $_GET['user_ids'] ?? '';
+            $userIdsArray = null;
+            
+            if ($userIds) {
+                $userIdsArray = array_filter(explode(',', $userIds), 'is_numeric');
+            }
+            
+            $events = $eventModel->getEventsInRange($startDate, $endDate, $userIdsArray);
+            sendResponse($events);
+            break;
+            
+        case 'upcoming_events':
+            $currentUser = $auth->requireAuth();
+            
+            $limit = (int)($_GET['limit'] ?? 10);
+            $limit = max(1, min($limit, 50)); // Limit between 1 and 50
+            
+            $events = $eventModel->getUpcomingEvents($currentUser['id'], $limit);
+            sendResponse($events);
+            break;
+            
+        case 'search_events':
+            $auth->requireAuth();
+            
+            $query = $_GET['query'] ?? '';
+            if (empty($query)) {
+                throw new Exception('Search query is required');
+            }
+            
+            $userId = $_GET['user_id'] ?? null;
+            $limit = (int)($_GET['limit'] ?? 20);
+            $limit = max(1, min($limit, 100)); // Limit between 1 and 100
+            
+            $events = $eventModel->searchEvents($query, $userId, $limit);
+            sendResponse($events);
+            break;
+            
+        case 'event_stats':
+            $currentUser = $auth->requireAuth();
+            
+            $userId = $_GET['user_id'] ?? $currentUser['id'];
+            if ($userId != $currentUser['id']) {
+                // Users can only see their own detailed stats
+                throw new Exception('You can only view your own event statistics');
+            }
+            
+            $stats = $eventModel->getEventStats($userId);
+            sendResponse($stats);
+            break;
+            
+        case 'user_stats':
+            $currentUser = $auth->requireAuth();
+            
+            $userId = $_GET['user_id'] ?? $currentUser['id'];
+            if ($userId != $currentUser['id']) {
+                throw new Exception('You can only view your own statistics');
+            }
+            
+            $stats = $userModel->getUserStats($userId);
+            sendResponse($stats);
+            break;
+            
+        case 'calendar_updates':
+            $auth->requireAuth();
+            
+            $lastId = (int)($_GET['last_id'] ?? 0);
+            $limit = (int)($_GET['limit'] ?? 10);
+            $limit = max(1, min($limit, 50)); // Limit between 1 and 50
+            
+            $updates = $calendarUpdate->getUpdates($lastId, $limit);
+            sendResponse($updates);
+            break;
+            
+        case 'latest_update_id':
+            $auth->requireAuth();
+            
+            $latestId = $calendarUpdate->getLatestUpdateId();
+            sendResponse(['latest_id' => $latestId]);
             break;
             
         case 'test':
-            // Test endpoint to verify API is working
-            echo json_encode([
+            $isAuthenticated = $auth->checkAuth()['authenticated'] ?? false;
+            sendResponse([
                 'status' => 'success',
                 'message' => 'API is working',
                 'timestamp' => time(),
-                'authenticated' => $auth->checkAuth()['authenticated'] ?? false
+                'authenticated' => $isAuthenticated
             ]);
             break;
             
         default:
-            http_response_code(400);
-            echo json_encode(['error' => 'Invalid action']);
+            throw new Exception('Invalid action');
     }
 }
 
-function handlePost($pdo, $auth) {
-    $input = json_decode(file_get_contents('php://input'), true);
-    
-    if (!$input) {
-        http_response_code(400);
-        echo json_encode(['error' => 'Invalid JSON input']);
-        return;
-    }
-    
+/**
+ * Handle POST requests
+ */
+function handlePostRequest($auth, $userModel, $eventModel, $calendarUpdate) {
+    $input = getJsonInput();
     $action = $input['action'] ?? '';
     
     switch ($action) {
         case 'register':
-            // User registration
-            if (!isset($input['name'], $input['email'], $input['password'])) {
-                http_response_code(400);
-                echo json_encode(['error' => 'Missing required fields: name, email, password']);
-                return;
-            }
+            validateRequiredFields($input, ['name', 'email', 'password']);
             
             $result = $auth->register(
                 trim($input['name']),
@@ -228,16 +294,11 @@ function handlePost($pdo, $auth) {
                 $input['password']
             );
             
-            echo json_encode($result);
+            sendResponse($result, $result['success'] ? 201 : 400);
             break;
             
         case 'login':
-            // User login
-            if (!isset($input['email'], $input['password'])) {
-                http_response_code(400);
-                echo json_encode(['error' => 'Missing required fields: email, password']);
-                return;
-            }
+            validateRequiredFields($input, ['email', 'password']);
             
             $result = $auth->login(
                 trim($input['email']),
@@ -245,42 +306,29 @@ function handlePost($pdo, $auth) {
                 $input['rememberMe'] ?? false
             );
             
-            echo json_encode($result);
+            sendResponse($result, $result['success'] ? 200 : 401);
             break;
             
         case 'logout':
-            // User logout
             $result = $auth->logout();
-            echo json_encode($result);
+            sendResponse($result);
             break;
             
         case 'create_user':
-            // Legacy user creation (now redirects to registration)
-            // This maintains backward compatibility with existing frontend code
+            // Legacy support - now requires authentication
+            $currentUser = $auth->requireAuth();
+            
             if (!isset($input['userName'])) {
-                http_response_code(400);
-                echo json_encode(['error' => 'Missing userName field']);
-                return;
+                throw new Exception('Missing userName field');
             }
             
             $userName = trim($input['userName']);
-            
             if (empty($userName)) {
-                http_response_code(400);
-                echo json_encode(['error' => 'userName cannot be empty']);
-                return;
+                throw new Exception('userName cannot be empty');
             }
             
-            // For backward compatibility, we'll look up user by name
-            // In the new system, users should be authenticated
-            $currentUser = $auth->getCurrentUser();
-            if (!$currentUser) {
-                http_response_code(401);
-                echo json_encode(['error' => 'Authentication required']);
-                return;
-            }
-            
-            echo json_encode([
+            // Return current user info for backward compatibility
+            sendResponse([
                 'id' => $currentUser['id'],
                 'name' => $currentUser['name'],
                 'color' => $currentUser['color'],
@@ -288,210 +336,113 @@ function handlePost($pdo, $auth) {
             ]);
             break;
             
-        default:
-            // Handle event creation (requires authentication)
+        case 'create_event':
             $currentUser = $auth->requireAuth();
             
-            if (!isset($input['title'])) {
-                http_response_code(400);
-                echo json_encode(['error' => 'Missing required field: title']);
-                return;
-            }
+            validateRequiredFields($input, ['title', 'start']);
             
-            // Validate input
-            $title = trim($input['title']);
-            
-            if (empty($title)) {
-                http_response_code(400);
-                echo json_encode(['error' => 'Title cannot be empty']);
-                return;
-            }
-            
-            // Validate dates
-            $startDate = $input['start'];
-            $endDate = $input['end'] ?? $input['start'];
-            
-            if (!$startDate) {
-                http_response_code(400);
-                echo json_encode(['error' => 'Start date is required']);
-                return;
-            }
-            
-            // Create event using authenticated user
-            $stmt = $pdo->prepare("
-                INSERT INTO events (user_id, title, start_datetime, end_datetime) 
-                VALUES (?, ?, ?, ?)
-            ");
-            
-            $stmt->execute([
+            $event = $eventModel->createEvent(
                 $currentUser['id'],
-                $title,
-                $startDate,
-                $endDate
-            ]);
+                $input['title'],
+                $input['start'],
+                $input['end'] ?? null
+            );
             
-            $eventId = $pdo->lastInsertId();
+            sendResponse($event, 201);
+            break;
             
-            // Get the created event with user info
-            $stmt = $pdo->prepare("
-                SELECT e.*, u.name as user_name, u.color as user_color 
-                FROM events e 
-                JOIN users u ON e.user_id = u.id 
-                WHERE e.id = ?
-            ");
-            $stmt->execute([$eventId]);
-            $event = $stmt->fetch();
+        case 'search_users':
+            $auth->requireAuth();
             
-            // Format for FullCalendar
-            $formattedEvent = [
-                'id' => $event['id'],
-                'title' => $event['title'],
-                'start' => $event['start_datetime'],
-                'end' => $event['end_datetime'],
-                'backgroundColor' => $event['user_color'],
-                'borderColor' => $event['user_color'],
-                'extendedProps' => [
-                    'userId' => $event['user_id'],
-                    'userName' => $event['user_name']
-                ]
-            ];
+            validateRequiredFields($input, ['query']);
             
-            // Broadcast update
-            broadcastUpdate($pdo, 'create', $formattedEvent);
+            $limit = (int)($input['limit'] ?? 10);
+            $limit = max(1, min($limit, 50)); // Limit between 1 and 50
             
-            echo json_encode($formattedEvent);
+            $users = $userModel->searchUsers($input['query'], $limit);
+            sendResponse($users);
+            break;
+            
+        case 'broadcast_notification':
+            $currentUser = $auth->requireAuth();
+            
+            validateRequiredFields($input, ['message']);
+            
+            $type = $input['type'] ?? 'info';
+            $additionalData = $input['data'] ?? [];
+            
+            $success = $calendarUpdate->broadcastNotification(
+                $input['message'],
+                $type,
+                $additionalData
+            );
+            
+            sendResponse(['success' => $success]);
+            break;
+            
+        default:
+            // Default: Create event (for backward compatibility)
+            $currentUser = $auth->requireAuth();
+            
+            validateRequiredFields($input, ['title']);
+            
+            if (!isset($input['start'])) {
+                throw new Exception('Start date is required');
+            }
+            
+            $event = $eventModel->createEvent(
+                $currentUser['id'],
+                $input['title'],
+                $input['start'],
+                $input['end'] ?? null
+            );
+            
+            sendResponse($event, 201);
             break;
     }
 }
 
-function handlePut($pdo, $auth) {
-    // Require authentication for event updates
+/**
+ * Handle PUT requests
+ */
+function handlePutRequest($auth, $eventModel) {
     $currentUser = $auth->requireAuth();
+    $input = getJsonInput();
     
-    $input = json_decode(file_get_contents('php://input'), true);
+    validateRequiredFields($input, ['id', 'title', 'start']);
     
-    if (!$input || !isset($input['id'])) {
-        http_response_code(400);
-        echo json_encode(['error' => 'Missing event ID']);
-        return;
+    $eventId = (int)$input['id'];
+    if ($eventId <= 0) {
+        throw new Exception('Invalid event ID');
     }
     
-    // Validate required fields
-    if (!isset($input['title']) || !isset($input['start'])) {
-        http_response_code(400);
-        echo json_encode(['error' => 'Missing required fields: title and start are required']);
-        return;
-    }
-    
-    // Check if user owns this event
-    $stmt = $pdo->prepare("SELECT user_id FROM events WHERE id = ?");
-    $stmt->execute([$input['id']]);
-    $event = $stmt->fetch();
-    
-    if (!$event) {
-        http_response_code(404);
-        echo json_encode(['error' => 'Event not found']);
-        return;
-    }
-    
-    if ($event['user_id'] != $currentUser['id']) {
-        http_response_code(403);
-        echo json_encode(['error' => 'You can only edit your own events']);
-        return;
-    }
-    
-    // Update event
-    $stmt = $pdo->prepare("
-        UPDATE events 
-        SET title = ?, start_datetime = ?, end_datetime = ? 
-        WHERE id = ?
-    ");
-    
-    $stmt->execute([
-        trim($input['title']),
-        $input['start'],
-        $input['end'] ?? $input['start'],
-        $input['id']
-    ]);
-    
-    // Check if event was actually updated
-    if ($stmt->rowCount() === 0) {
-        http_response_code(404);
-        echo json_encode(['error' => 'Event not found or no changes made']);
-        return;
-    }
-    
-    // Get updated event with user info
-    $stmt = $pdo->prepare("
-        SELECT e.*, u.name as user_name, u.color as user_color 
-        FROM events e 
-        JOIN users u ON e.user_id = u.id 
-        WHERE e.id = ?
-    ");
-    $stmt->execute([$input['id']]);
-    $event = $stmt->fetch();
-    
-    if ($event) {
-        // Format for FullCalendar
-        $formattedEvent = [
-            'id' => $event['id'],
-            'title' => $event['title'],
-            'start' => $event['start_datetime'],
-            'end' => $event['end_datetime'],
-            'backgroundColor' => $event['user_color'],
-            'borderColor' => $event['user_color'],
-            'extendedProps' => [
-                'userId' => $event['user_id'],
-                'userName' => $event['user_name']
-            ]
-        ];
-        
-        // Broadcast update
-        broadcastUpdate($pdo, 'update', $formattedEvent);
-        
-        echo json_encode($formattedEvent);
-    } else {
-        http_response_code(404);
-        echo json_encode(['error' => 'Event not found']);
-    }
+    $event = $eventModel->updateEvent($eventId, $currentUser['id'], $input);
+    sendResponse($event);
 }
 
-function handleDelete($pdo, $auth) {
-    // Require authentication for event deletion
+/**
+ * Handle DELETE requests
+ */
+function handleDeleteRequest($auth, $eventModel) {
     $currentUser = $auth->requireAuth();
     
     $eventId = $_GET['id'] ?? null;
     
     if (!$eventId || !is_numeric($eventId)) {
-        http_response_code(400);
-        echo json_encode(['error' => 'Missing or invalid event ID']);
-        return;
+        throw new Exception('Missing or invalid event ID');
     }
     
-    // Get event and check ownership
-    $stmt = $pdo->prepare("SELECT user_id FROM events WHERE id = ?");
-    $stmt->execute([$eventId]);
-    $event = $stmt->fetch();
-    
-    if (!$event) {
-        http_response_code(404);
-        echo json_encode(['error' => 'Event not found']);
-        return;
+    $eventId = (int)$eventId;
+    if ($eventId <= 0) {
+        throw new Exception('Invalid event ID');
     }
     
-    if ($event['user_id'] != $currentUser['id']) {
-        http_response_code(403);
-        echo json_encode(['error' => 'You can only delete your own events']);
-        return;
+    $success = $eventModel->deleteEvent($eventId, $currentUser['id']);
+    
+    if ($success) {
+        sendResponse(['success' => true, 'message' => 'Event deleted successfully']);
+    } else {
+        throw new Exception('Failed to delete event');
     }
-    
-    // Delete event
-    $stmt = $pdo->prepare("DELETE FROM events WHERE id = ?");
-    $stmt->execute([$eventId]);
-    
-    // Broadcast update
-    broadcastUpdate($pdo, 'delete', ['id' => $eventId]);
-    
-    echo json_encode(['success' => true, 'message' => 'Event deleted successfully']);
 }
 ?>

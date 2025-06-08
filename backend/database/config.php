@@ -1,15 +1,12 @@
 <?php
 /**
- * Database configuration and helper functions - FIXED VERSION
+ * Updated Database Configuration - Refactored Version
  * Location: backend/database/config.php
  * 
- * This file handles database connection and provides helper functions
- * for user management and real-time update broadcasting.
+ * This file handles database connection and provides the legacy broadcastUpdate
+ * function for backward compatibility with existing SSE code.
  * 
- * FIXES:
- * - Prevents duplicate broadcasts
- * - Improved error handling
- * - Better connection management
+ * The broadcastUpdate function now delegates to the CalendarUpdate model.
  */
 
 // Database configuration
@@ -29,11 +26,32 @@ try {
     die(json_encode(['error' => 'Database connection failed. Please check your configuration.']));
 }
 
-// Track recent broadcasts to prevent duplicates
-$recentBroadcasts = [];
+// Initialize CalendarUpdate model for legacy compatibility
+require_once __DIR__ . '/../models/CalendarUpdate.php';
+$calendarUpdate = new CalendarUpdate($pdo);
+$calendarUpdate->initialize();
 
 /**
- * Helper function to get or create user
+ * Legacy broadcastUpdate function for backward compatibility
+ * This delegates to the CalendarUpdate model
+ * 
+ * @param PDO $pdo Database connection (ignored, kept for compatibility)
+ * @param string $eventType Type of event (create, update, delete)
+ * @param array $eventData Event data to broadcast
+ */
+function broadcastUpdate($pdo, $eventType, $eventData) {
+    global $calendarUpdate;
+    
+    try {
+        return $calendarUpdate->broadcastUpdate($eventType, $eventData);
+    } catch (Exception $e) {
+        error_log("Legacy broadcastUpdate error: " . $e->getMessage());
+        return false;
+    }
+}
+
+/**
+ * Helper function to get or create user (updated to use User model)
  * 
  * @param PDO $pdo Database connection
  * @param string $name User name
@@ -42,6 +60,9 @@ $recentBroadcasts = [];
  */
 function getOrCreateUser($pdo, $name) {
     try {
+        // For backward compatibility, we'll still use direct database queries
+        // but this should ideally use the User model
+        
         // Check if user exists
         $stmt = $pdo->prepare("SELECT * FROM users WHERE name = ?");
         $stmt->execute([$name]);
@@ -70,66 +91,6 @@ function getOrCreateUser($pdo, $name) {
 }
 
 /**
- * Helper function to broadcast update via SSE with duplicate prevention
- * 
- * @param PDO $pdo Database connection
- * @param string $eventType Type of event (create, update, delete)
- * @param array $eventData Event data to broadcast
- */
-function broadcastUpdate($pdo, $eventType, $eventData) {
-    global $recentBroadcasts;
-    
-    try {
-        // Create a hash to identify duplicate broadcasts
-        $eventHash = md5($eventType . json_encode($eventData) . time());
-        
-        // Check if this exact event was recently broadcast (within last 5 seconds)
-        $currentTime = time();
-        $recentBroadcasts = array_filter($recentBroadcasts, function($broadcast) use ($currentTime) {
-            return ($currentTime - $broadcast['timestamp']) < 5; // Keep only last 5 seconds
-        });
-        
-        // Check for duplicates
-        foreach ($recentBroadcasts as $broadcast) {
-            if ($broadcast['type'] === $eventType && 
-                isset($eventData['id']) && isset($broadcast['data']['id']) && 
-                $eventData['id'] === $broadcast['data']['id']) {
-                error_log("Preventing duplicate broadcast for {$eventType} event ID {$eventData['id']}");
-                return; // Skip duplicate broadcast
-            }
-        }
-        
-        // Add to recent broadcasts tracking
-        $recentBroadcasts[] = [
-            'hash' => $eventHash,
-            'type' => $eventType,
-            'data' => $eventData,
-            'timestamp' => $currentTime
-        ];
-        
-        // Insert the update into database
-        $stmt = $pdo->prepare("INSERT INTO calendar_updates (event_type, event_data) VALUES (?, ?)");
-        $stmt->execute([$eventType, json_encode($eventData)]);
-        
-        error_log("Broadcast update: {$eventType} for event ID " . ($eventData['id'] ?? 'N/A'));
-        
-        // Clean up old updates more aggressively to prevent bloat
-        if (rand(1, 50) === 1) { // 2% chance to clean up (more frequent)
-            $deleteStmt = $pdo->prepare("DELETE FROM calendar_updates WHERE id < (SELECT id FROM (SELECT id FROM calendar_updates ORDER BY id DESC LIMIT 1 OFFSET 100) AS t)");
-            $deleteStmt->execute();
-            $deletedCount = $deleteStmt->rowCount();
-            if ($deletedCount > 0) {
-                error_log("Cleaned up $deletedCount old calendar updates");
-            }
-        }
-        
-    } catch (PDOException $e) {
-        error_log("Error in broadcastUpdate: " . $e->getMessage());
-        // Don't throw here as this shouldn't break the main operation
-    }
-}
-
-/**
  * Test database connection
  * 
  * @param PDO $pdo Database connection
@@ -152,19 +113,13 @@ function testDatabaseConnection($pdo) {
 function initializeDatabaseTables($pdo) {
     try {
         // Check if tables exist
-        $stmt = $pdo->query("SHOW TABLES LIKE 'users'");
-        if (!$stmt->fetch()) {
-            throw new Exception("Database tables not found. Please import the SQL schema from documentation/calendar-app.sql");
-        }
+        $tables = ['users', 'events', 'calendar_updates', 'user_sessions'];
         
-        $stmt = $pdo->query("SHOW TABLES LIKE 'events'");
-        if (!$stmt->fetch()) {
-            throw new Exception("Database tables not found. Please import the SQL schema from documentation/calendar-app.sql");
-        }
-        
-        $stmt = $pdo->query("SHOW TABLES LIKE 'calendar_updates'");
-        if (!$stmt->fetch()) {
-            throw new Exception("Database tables not found. Please import the SQL schema from documentation/calendar-app.sql");
+        foreach ($tables as $table) {
+            $stmt = $pdo->query("SHOW TABLES LIKE '{$table}'");
+            if (!$stmt->fetch()) {
+                throw new Exception("Database table '{$table}' not found. Please import the SQL schema from documentation/calendar-app.sql");
+            }
         }
         
         return true;
@@ -175,23 +130,16 @@ function initializeDatabaseTables($pdo) {
 }
 
 /**
- * Clear old calendar updates that might be causing issues
+ * Clear old calendar updates using the CalendarUpdate model
  * 
- * @param PDO $pdo Database connection
+ * @param PDO $pdo Database connection (kept for compatibility)
  */
 function clearOldUpdates($pdo) {
+    global $calendarUpdate;
+    
     try {
-        // Delete updates older than 1 hour
-        $stmt = $pdo->prepare("DELETE FROM calendar_updates WHERE created_at < DATE_SUB(NOW(), INTERVAL 1 HOUR)");
-        $stmt->execute();
-        $deletedCount = $stmt->rowCount();
-        
-        if ($deletedCount > 0) {
-            error_log("Cleared $deletedCount old calendar updates");
-        }
-        
-        return $deletedCount;
-    } catch (PDOException $e) {
+        return $calendarUpdate->cleanupOldUpdates();
+    } catch (Exception $e) {
         error_log("Error clearing old updates: " . $e->getMessage());
         return 0;
     }
@@ -203,7 +151,7 @@ if (!testDatabaseConnection($pdo)) {
     die(json_encode(['error' => 'Database connection test failed']));
 }
 
-// Optional: Check if tables exist (useful for development)
+// Check if tables exist (useful for development)
 if (!initializeDatabaseTables($pdo)) {
     error_log("Database tables validation failed");
     // Note: We don't die here to allow the application to continue running
@@ -213,5 +161,62 @@ if (!initializeDatabaseTables($pdo)) {
 // Optional: Clear old updates on connection to prevent buildup
 if (rand(1, 20) === 1) { // 5% chance to clean up old updates
     clearOldUpdates($pdo);
+}
+
+/**
+ * Get database statistics
+ * 
+ * @return array Database statistics
+ */
+function getDatabaseStats() {
+    global $pdo, $calendarUpdate;
+    
+    try {
+        $stats = [];
+        
+        // User count
+        $stmt = $pdo->query("SELECT COUNT(*) as user_count FROM users");
+        $stats['users'] = $stmt->fetch()['user_count'];
+        
+        // Event count
+        $stmt = $pdo->query("SELECT COUNT(*) as event_count FROM events");
+        $stats['events'] = $stmt->fetch()['event_count'];
+        
+        // Update stats
+        $updateStats = $calendarUpdate->getUpdateStats();
+        $stats['updates'] = $updateStats;
+        
+        // Session count
+        $stmt = $pdo->query("SELECT COUNT(*) as session_count FROM user_sessions WHERE is_active = 1 AND expires_at > NOW()");
+        $stats['active_sessions'] = $stmt->fetch()['session_count'];
+        
+        return $stats;
+        
+    } catch (Exception $e) {
+        error_log("Error getting database stats: " . $e->getMessage());
+        return [];
+    }
+}
+
+/**
+ * Initialize all models for external use
+ * 
+ * @return array Array of initialized models
+ */
+function initializeModels() {
+    global $pdo, $calendarUpdate;
+    
+    require_once __DIR__ . '/../models/User.php';
+    require_once __DIR__ . '/../models/Event.php';
+    
+    $userModel = new User($pdo, $calendarUpdate);
+    $eventModel = new Event($pdo, $calendarUpdate);
+    
+    return [
+        'pdo' => $pdo,
+        'user' => $userModel,
+        'event' => $eventModel,
+        'calendarUpdate' => $calendarUpdate
+    ];
 }
 ?>
