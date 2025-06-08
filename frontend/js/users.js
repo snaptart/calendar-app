@@ -1,7 +1,7 @@
-// Users Management Page with DataTables
+// Enhanced Users Management Page with Better Data Handling
 // Location: frontend/js/users.js
 // 
-// Displays all system users in a DataTable with real-time updates
+// Improved version with better error handling and data validation
 
 // =============================================================================
 // CORE UTILITIES AND EVENT BUS
@@ -53,11 +53,11 @@ const Config = {
 };
 
 /**
- * Utility functions
+ * Enhanced utility functions
  */
 const Utils = {
     formatDate(dateString) {
-        if (!dateString || dateString === '0000-00-00 00:00:00') {
+        if (!dateString || dateString === '0000-00-00 00:00:00' || dateString === null) {
             return 'Never';
         }
         
@@ -76,7 +76,7 @@ const Utils = {
     },
     
     formatDateShort(dateString) {
-        if (!dateString || dateString === '0000-00-00 00:00:00') {
+        if (!dateString || dateString === '0000-00-00 00:00:00' || dateString === null) {
             return 'Never';
         }
         
@@ -93,7 +93,7 @@ const Utils = {
     },
     
     getTimeAgo(dateString) {
-        if (!dateString || dateString === '0000-00-00 00:00:00') {
+        if (!dateString || dateString === '0000-00-00 00:00:00' || dateString === null) {
             return 'Never';
         }
         
@@ -130,29 +130,60 @@ const Utils = {
     },
     
     getUserStatus(user) {
-        const now = new Date();
-        const lastLogin = new Date(user.last_login);
+        // Check if user has status field from backend
+        if (user.status) {
+            return user.status;
+        }
         
-        if (!user.last_login || user.last_login === '0000-00-00 00:00:00') {
+        // Fallback calculation
+        const now = new Date();
+        
+        // Check if user has password (registered user vs guest)
+        if (!user.has_password && user.has_password !== undefined) {
+            return 'guest';
+        }
+        
+        const lastLogin = user.last_login;
+        if (!lastLogin || lastLogin === '0000-00-00 00:00:00' || lastLogin === null) {
             return 'new';
         }
         
-        const diffDays = Math.floor((now - lastLogin) / (1000 * 60 * 60 * 24));
+        const lastLoginDate = new Date(lastLogin);
+        const diffDays = Math.floor((now - lastLoginDate) / (1000 * 60 * 60 * 24));
         
         if (diffDays <= 1) {
             return 'active';
+        } else if (diffDays <= 7) {
+            return 'recent';
         } else {
             return 'inactive';
         }
+    },
+    
+    validateUserData(user) {
+        // Ensure required fields exist with defaults
+        return {
+            id: user.id || 0,
+            name: user.name || 'Unknown User',
+            email: user.email || null,
+            color: user.color || '#3498db',
+            created_at: user.created_at || null,
+            last_login: user.last_login || null,
+            event_count: parseInt(user.event_count) || 0,
+            upcoming_events: parseInt(user.upcoming_events) || 0,
+            past_events: parseInt(user.past_events) || 0,
+            status: user.status || 'unknown',
+            has_password: user.has_password || false
+        };
     }
 };
 
 // =============================================================================
-// API CLIENT WITH AUTHENTICATION
+// API CLIENT WITH ENHANCED ERROR HANDLING
 // =============================================================================
 
 /**
- * Centralized API communication with authentication
+ * Enhanced API communication with better error handling
  */
 const APIClient = (() => {
     const makeRequest = async (url, options = {}) => {
@@ -177,7 +208,9 @@ const APIClient = (() => {
                 throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
             }
             
-            return await response.json();
+            const data = await response.json();
+            console.log('API Response:', data); // Debug logging
+            return data;
         } catch (error) {
             console.error('API Request failed:', error);
             throw error;
@@ -190,14 +223,21 @@ const APIClient = (() => {
             return makeRequest(`${Config.apiEndpoints.api}?action=check_auth`);
         },
         
-        // User operations with event counts
+        // User operations with enhanced stats
         getUsersWithStats() {
+            console.log('Fetching users with stats...');
             return makeRequest(`${Config.apiEndpoints.api}?action=users_with_stats`);
         },
         
         // Fallback to regular users endpoint
         getUsers() {
+            console.log('Fetching basic users...');
             return makeRequest(`${Config.apiEndpoints.api}?action=users`);
+        },
+        
+        // Get user activity summary
+        getUserActivity(days = 30) {
+            return makeRequest(`${Config.apiEndpoints.api}?action=user_activity&days=${days}`);
         }
     };
 })();
@@ -267,7 +307,7 @@ const AuthGuard = (() => {
 // =============================================================================
 
 /**
- * Manages UI updates and visual feedback
+ * Enhanced UI management with better feedback
  */
 const UIManager = (() => {
     const updateConnectionStatus = (message, className = '') => {
@@ -298,6 +338,44 @@ const UIManager = (() => {
         if (overlay) {
             overlay.classList.add('hidden');
         }
+    };
+    
+    const showError = (message) => {
+        // Create or update error display
+        let errorEl = document.getElementById('errorDisplay');
+        if (!errorEl) {
+            errorEl = document.createElement('div');
+            errorEl.id = 'errorDisplay';
+            errorEl.className = 'alert alert-danger';
+            errorEl.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                z-index: 10000;
+                max-width: 400px;
+                padding: 15px;
+                background: #f8d7da;
+                border: 1px solid #f5c6cb;
+                border-radius: 8px;
+                color: #721c24;
+            `;
+            document.body.appendChild(errorEl);
+        }
+        
+        errorEl.innerHTML = `
+            <strong>Error:</strong> ${message}
+            <button type="button" class="close" style="float: right; background: none; border: none; font-size: 18px; cursor: pointer;">&times;</button>
+        `;
+        
+        // Auto-hide after 5 seconds
+        setTimeout(() => {
+            errorEl.remove();
+        }, 5000);
+        
+        // Close button
+        errorEl.querySelector('.close').addEventListener('click', () => {
+            errorEl.remove();
+        });
     };
     
     const setupAuthenticatedUI = (user) => {
@@ -352,8 +430,9 @@ const UIManager = (() => {
         hideLoadingOverlay();
     });
     
-    EventBus.on('users:error', () => {
+    EventBus.on('users:error', ({ error }) => {
         hideLoadingOverlay();
+        showError(error.message || 'Failed to load users data');
     });
     
     return {
@@ -361,47 +440,63 @@ const UIManager = (() => {
         updateUserStatus,
         showLoadingOverlay,
         hideLoadingOverlay,
+        showError,
         setupAuthenticatedUI
     };
 })();
 
 // =============================================================================
-// USERS DATA MANAGER
+// ENHANCED USERS DATA MANAGER
 // =============================================================================
 
 /**
- * Manages user data and statistics
+ * Enhanced user data management with better validation
  */
 const UsersDataManager = (() => {
     let usersData = [];
-    let eventsData = [];
+    let lastFetchTime = 0;
     
     const loadUsersData = async () => {
         try {
             EventBus.emit('users:loading');
             
-            // Load users and events data
-            const [users, events] = await Promise.all([
-                APIClient.getUsers(),
-                fetchEventsData()
-            ]);
+            console.log('Loading users data...');
             
-            usersData = users;
-            eventsData = events;
-            
-            // Calculate statistics for each user
-            const usersWithStats = usersData.map(user => {
-                const userEvents = eventsData.filter(event => event.user_id === user.id);
+            // Try to get users with stats first
+            let users;
+            try {
+                users = await APIClient.getUsersWithStats();
+                console.log('Successfully loaded users with stats:', users);
+            } catch (error) {
+                console.warn('Failed to load users with stats, falling back to basic users:', error);
+                // Fallback to basic users
+                const basicUsers = await APIClient.getUsers();
                 
-                return {
-                    ...user,
-                    event_count: userEvents.length,
+                // Enhance basic users with default stats
+                users = basicUsers.map(user => ({
+                    ...Utils.validateUserData(user),
+                    event_count: 0,
+                    upcoming_events: 0,
+                    past_events: 0,
                     status: Utils.getUserStatus(user)
-                };
+                }));
+            }
+            
+            // Validate and clean user data
+            if (!Array.isArray(users)) {
+                throw new Error('Invalid users data format received from server');
+            }
+            
+            usersData = users.map(user => {
+                const validatedUser = Utils.validateUserData(user);
+                console.log('Validated user:', validatedUser);
+                return validatedUser;
             });
             
-            EventBus.emit('users:loaded', { users: usersWithStats });
-            return usersWithStats;
+            lastFetchTime = Date.now();
+            
+            EventBus.emit('users:loaded', { users: usersData });
+            return usersData;
             
         } catch (error) {
             console.error('Error loading users data:', error);
@@ -410,51 +505,29 @@ const UsersDataManager = (() => {
         }
     };
     
-    const fetchEventsData = async () => {
-        try {
-            // Get all events for statistics
-            const response = await fetch(`${Config.apiEndpoints.api}?action=events`, {
-                credentials: 'include'
-            });
-            
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}`);
-            }
-            
-            const events = await response.json();
-            return events.map(event => ({
-                id: event.id,
-                user_id: event.extendedProps.userId,
-                title: event.title,
-                start: event.start,
-                end: event.end
-            }));
-            
-        } catch (error) {
-            console.warn('Could not load events data for statistics:', error);
-            return []; // Return empty array if events can't be loaded
-        }
-    };
-    
     const refreshData = () => {
+        console.log('Refreshing users data...');
         return loadUsersData();
     };
     
     const getUsersData = () => usersData;
     
+    const getLastFetchTime = () => lastFetchTime;
+    
     return {
         loadUsersData,
         refreshData,
-        getUsersData
+        getUsersData,
+        getLastFetchTime
     };
 })();
 
 // =============================================================================
-// DATATABLES MANAGER
+// ENHANCED DATATABLES MANAGER
 // =============================================================================
 
 /**
- * Manages DataTables initialization and operations
+ * Enhanced DataTables management with better data handling
  */
 const DataTablesManager = (() => {
     let dataTable = null;
@@ -462,7 +535,10 @@ const DataTablesManager = (() => {
     const initializeDataTable = () => {
         if (dataTable) {
             dataTable.destroy();
+            dataTable = null;
         }
+        
+        console.log('Initializing DataTable...');
         
         dataTable = $('#usersTable').DataTable({
             responsive: true,
@@ -542,12 +618,11 @@ const DataTablesManager = (() => {
                 emptyTable: "No users found in the system"
             },
             drawCallback: function() {
-                // Add tooltips or additional formatting here if needed
                 console.log('DataTable redrawn');
             }
         });
         
-        console.log('DataTable initialized');
+        console.log('DataTable initialized successfully');
     };
     
     const loadData = (users) => {
@@ -556,32 +631,47 @@ const DataTablesManager = (() => {
             return;
         }
         
+        console.log('Loading data into DataTable:', users);
+        
+        // Validate users data
+        if (!Array.isArray(users)) {
+            console.error('Invalid users data provided to DataTable');
+            return;
+        }
+        
         // Clear existing data
         dataTable.clear();
         
         // Add new data
-        users.forEach(user => {
-            const row = [
-                createColorIndicator(user.color),
-                user.name || 'Unknown',
-                user.email || 'No email',
-                createEventCountBadge(user.event_count),
-                Utils.formatDateShort(user.created_at),
-                Utils.getTimeAgo(user.last_login),
-                createStatusBadge(user.status)
-            ];
-            
-            dataTable.row.add(row);
+        users.forEach((user, index) => {
+            try {
+                const validatedUser = Utils.validateUserData(user);
+                
+                const row = [
+                    createColorIndicator(validatedUser.color),
+                    validatedUser.name,
+                    validatedUser.email || 'No email',
+                    createEventCountBadge(validatedUser.event_count),
+                    Utils.formatDateShort(validatedUser.created_at),
+                    Utils.getTimeAgo(validatedUser.last_login),
+                    createStatusBadge(validatedUser.status)
+                ];
+                
+                dataTable.row.add(row);
+            } catch (error) {
+                console.error(`Error processing user ${index}:`, error, user);
+            }
         });
         
         // Redraw table
         dataTable.draw();
         
-        console.log(`Loaded ${users.length} users into DataTable`);
+        console.log(`Successfully loaded ${users.length} users into DataTable`);
     };
     
     const createColorIndicator = (color) => {
-        return `<div class="user-color-indicator" style="background-color: ${color || '#3788d8'}"></div>`;
+        const safeColor = color || '#3498db';
+        return `<div class="user-color-indicator" style="background-color: ${safeColor}"></div>`;
     };
     
     const createEventCountBadge = (count) => {
@@ -600,17 +690,21 @@ const DataTablesManager = (() => {
     const createStatusBadge = (status) => {
         const statusMap = {
             'active': { class: 'active', text: 'Active' },
+            'recent': { class: 'recent', text: 'Recent' },
             'inactive': { class: 'inactive', text: 'Inactive' },
-            'new': { class: 'new', text: 'New' }
+            'new': { class: 'new', text: 'New' },
+            'guest': { class: 'guest', text: 'Guest' },
+            'unknown': { class: 'unknown', text: 'Unknown' }
         };
         
-        const statusInfo = statusMap[status] || statusMap['inactive'];
+        const statusInfo = statusMap[status] || statusMap['unknown'];
         return `<span class="status-badge ${statusInfo.class}">${statusInfo.text}</span>`;
     };
     
     const refreshTable = () => {
         if (dataTable) {
-            dataTable.ajax.reload(null, false); // false = don't reset paging
+            // Instead of ajax reload, we'll trigger a data refresh
+            EventBus.emit('users:refresh');
         }
     };
     
@@ -748,7 +842,7 @@ const SSEManager = (() => {
 // =============================================================================
 
 /**
- * Main application controller that coordinates all components
+ * Enhanced application controller with better error handling
  */
 const UsersApp = (() => {
     const setupEventListeners = () => {
@@ -756,31 +850,48 @@ const UsersApp = (() => {
         const refreshBtn = document.getElementById('refreshUsersBtn');
         refreshBtn?.addEventListener('click', async () => {
             try {
+                console.log('Manual refresh triggered');
                 const users = await UsersDataManager.refreshData();
                 DataTablesManager.loadData(users);
+                
+                // Show success feedback
+                const originalText = refreshBtn.textContent;
+                refreshBtn.textContent = '✓ Refreshed';
+                refreshBtn.style.background = '#48bb78';
+                refreshBtn.style.color = 'white';
+                
+                setTimeout(() => {
+                    refreshBtn.textContent = originalText;
+                    refreshBtn.style.background = '';
+                    refreshBtn.style.color = '';
+                }, 2000);
+                
             } catch (error) {
                 console.error('Error refreshing data:', error);
-                alert('Error refreshing data. Please try again.');
+                UIManager.showError('Failed to refresh data. Please try again.');
             }
         });
         
         // Event listeners
         EventBus.on('users:loaded', ({ users }) => {
+            console.log('Event: users:loaded', users);
             DataTablesManager.loadData(users);
         });
         
         EventBus.on('users:refresh', async () => {
             try {
+                console.log('Event: users:refresh triggered');
                 const users = await UsersDataManager.refreshData();
                 DataTablesManager.loadData(users);
             } catch (error) {
                 console.error('Error refreshing users:', error);
+                UIManager.showError('Failed to refresh user data');
             }
         });
     };
     
     const init = async () => {
-        console.log('Initializing Users Management Page...');
+        console.log('Initializing Enhanced Users Management Page...');
         
         // Check authentication first
         const isAuthenticated = await AuthGuard.checkAuthentication();
@@ -794,19 +905,21 @@ const UsersApp = (() => {
         DataTablesManager.initializeDataTable();
         setupEventListeners();
         
-        // Load initial data
+        // Load initial data with enhanced error handling
         try {
+            console.log('Loading initial users data...');
             const users = await UsersDataManager.loadUsersData();
             DataTablesManager.loadData(users);
+            console.log('Initial data loaded successfully');
         } catch (error) {
             console.error('Error loading initial data:', error);
-            alert('Error loading users data. Please refresh the page.');
+            UIManager.showError('Failed to load users data. Please refresh the page or contact support.');
         }
         
         // Start SSE connection
         SSEManager.connect();
         
-        console.log('Users Management Page initialized successfully');
+        console.log('Enhanced Users Management Page initialized successfully');
     };
     
     const destroy = () => {
@@ -830,6 +943,7 @@ const UsersApp = (() => {
 // =============================================================================
 
 document.addEventListener('DOMContentLoaded', () => {
+    console.log('DOM loaded, initializing Users app...');
     UsersApp.init();
 });
 
@@ -842,6 +956,7 @@ window.addEventListener('beforeunload', () => {
 window.addEventListener('pageshow', (event) => {
     if (event.persisted) {
         // Page was loaded from cache, check auth status again
+        console.log('Page loaded from cache, checking auth...');
         AuthGuard.checkAuthentication();
     }
 });

@@ -1,4 +1,4 @@
-/* DataTables Specific Styles */
+/* Enhanced DataTables Styles with Additional Status Types */
 /* Location: frontend/css/table.css */
 
 /* Table Controls */
@@ -166,7 +166,7 @@
     margin: 0 auto;
 }
 
-/* Status Badges */
+/* Enhanced Status Badges */
 .status-badge {
     padding: 4px 8px;
     border-radius: 12px;
@@ -175,42 +175,69 @@
     text-transform: uppercase;
     letter-spacing: 0.025em;
     white-space: nowrap;
+    display: inline-block;
+    min-width: 60px;
+    text-align: center;
 }
 
 .status-badge.active {
     background: #c6f6d5;
     color: #22543d;
+    border: 1px solid #9ae6b4;
+}
+
+.status-badge.recent {
+    background: #bee3f8;
+    color: #2a4365;
+    border: 1px solid #90cdf4;
 }
 
 .status-badge.inactive {
     background: #fed7d7;
     color: #742a2a;
+    border: 1px solid #fc8181;
 }
 
 .status-badge.new {
-    background: #bee3f8;
-    color: #2a4365;
+    background: #e6fffa;
+    color: #234e52;
+    border: 1px solid #81e6d9;
+}
+
+.status-badge.guest {
+    background: #faf5ff;
+    color: #553c9a;
+    border: 1px solid #d6bcfa;
+}
+
+.status-badge.unknown {
+    background: #f7fafc;
+    color: #4a5568;
+    border: 1px solid #e2e8f0;
 }
 
 /* Event Count Badge */
 .event-count {
     background: #4299e1;
     color: white;
-    padding: 2px 8px;
+    padding: 4px 8px;
     border-radius: 12px;
     font-size: 0.75rem;
     font-weight: 500;
     text-align: center;
-    min-width: 24px;
+    min-width: 28px;
     display: inline-block;
+    border: 1px solid #3182ce;
 }
 
 .event-count.zero {
     background: #a0aec0;
+    border-color: #718096;
 }
 
 .event-count.high {
     background: #38a169;
+    border-color: #2f855a;
 }
 
 /* DataTables Buttons */
@@ -322,6 +349,133 @@
     margin: 0;
 }
 
+/* Error Display */
+.alert {
+    border-radius: 8px;
+    font-size: 0.875rem;
+    line-height: 1.5;
+}
+
+.alert-danger {
+    background-color: #fed7d7;
+    border-color: #fc8181;
+    color: #742a2a;
+}
+
+.alert .close {
+    background: none;
+    border: none;
+    color: inherit;
+    opacity: 0.7;
+    cursor: pointer;
+    transition: opacity 0.2s ease;
+}
+
+.alert .close:hover {
+    opacity: 1;
+}
+
+/* Data Quality Indicators */
+.data-quality-indicator {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-left: 4px;
+}
+
+.data-quality-indicator.good {
+    background-color: #48bb78;
+}
+
+.data-quality-indicator.warning {
+    background-color: #ed8936;
+}
+
+.data-quality-indicator.error {
+    background-color: #f56565;
+}
+
+/* Empty State */
+.empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: #718096;
+}
+
+.empty-state .icon {
+    font-size: 3rem;
+    margin-bottom: 16px;
+    opacity: 0.5;
+}
+
+.empty-state h3 {
+    color: #4a5568;
+    margin-bottom: 8px;
+}
+
+.empty-state p {
+    max-width: 400px;
+    margin: 0 auto;
+}
+
+/* Tooltip Styles */
+.tooltip {
+    position: relative;
+    cursor: help;
+}
+
+.tooltip::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #2d3748;
+    color: white;
+    padding: 6px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+    z-index: 1000;
+}
+
+.tooltip:hover::after {
+    opacity: 1;
+}
+
+/* Enhanced Button States */
+.btn.success-state {
+    background: #48bb78 !important;
+    color: white !important;
+    border-color: #48bb78 !important;
+}
+
+.btn.error-state {
+    background: #f56565 !important;
+    color: white !important;
+    border-color: #f56565 !important;
+}
+
+/* Table Row States */
+.table tbody tr.highlight {
+    background-color: #ebf8ff !important;
+    border-left: 4px solid #4299e1;
+}
+
+.table tbody tr.warning {
+    background-color: #fffaf0 !important;
+    border-left: 4px solid #ed8936;
+}
+
+.table tbody tr.error {
+    background-color: #fed7d7 !important;
+    border-left: 4px solid #f56565;
+}
+
 /* Responsive Design */
 @media (max-width: 768px) {
     .table-controls {
@@ -377,6 +531,19 @@
     .dt-buttons {
         justify-content: center;
     }
+    
+    /* Status badges responsive */
+    .status-badge {
+        font-size: 0.625rem;
+        padding: 3px 6px;
+        min-width: 50px;
+    }
+    
+    .event-count {
+        font-size: 0.625rem;
+        padding: 3px 6px;
+        min-width: 24px;
+    }
 }
 
 @media (max-width: 480px) {
@@ -416,9 +583,122 @@
         font-size: 0.625rem;
         padding: 2px 6px;
     }
+    
+    /* Mobile-specific table adjustments */
+    .table-responsive {
+        border: none;
+    }
+    
+    .dataTables_wrapper .dataTables_filter input {
+        width: 100%;
+        margin-top: 8px;
+    }
 }
 
-/* Dark mode support (future enhancement) */
+/* Print Styles */
+@media print {
+    .loading-overlay,
+    .alert,
+    .dt-buttons,
+    .table-actions,
+    .breadcrumb-nav {
+        display: none !important;
+    }
+    
+    .table-wrapper,
+    .table-container {
+        box-shadow: none;
+        border: 1px solid #000;
+    }
+    
+    .table thead th {
+        background: #f0f0f0 !important;
+        color: #000 !important;
+    }
+    
+    .status-badge,
+    .event-count {
+        border: 1px solid #000;
+        background: #fff !important;
+        color: #000 !important;
+    }
+}
+
+/* High Contrast Mode Support */
+@media (prefers-contrast: high) {
+    .status-badge {
+        border-width: 2px;
+        font-weight: 600;
+    }
+    
+    .user-color-indicator {
+        border-width: 3px;
+        border-color: #000;
+    }
+    
+    .table tbody td {
+        border-width: 2px !important;
+    }
+}
+
+/* Dark Mode Support (future enhancement) */
 @media (prefers-color-scheme: dark) {
-    /* Can be implemented later if needed */
+    .table-wrapper,
+    .table-controls {
+        background: #2d3748;
+        border-color: #4a5568;
+    }
+    
+    .table {
+        color: #e2e8f0;
+    }
+    
+    .table thead th {
+        background: #4a5568 !important;
+        color: #e2e8f0 !important;
+        border-color: #718096 !important;
+    }
+    
+    .table tbody td {
+        border-color: #4a5568 !important;
+    }
+    
+    .table-striped > tbody > tr:nth-of-type(odd) > td {
+        background-color: #374151 !important;
+    }
+    
+    .table-hover > tbody > tr:hover > td {
+        background-color: #4a5568 !important;
+    }
+}
+
+/* Animation Classes */
+.fade-in {
+    animation: fadeIn 0.3s ease-in;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.slide-in {
+    animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+    from { transform: translateX(-20px); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+}
+
+/* Loading States */
+.loading-row {
+    background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+    background-size: 200% 100%;
+    animation: loading 1.5s infinite;
+}
+
+@keyframes loading {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
 }

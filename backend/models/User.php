@@ -1,9 +1,9 @@
 <?php
 /**
- * User Model Class
+ * Improved User Model Class with Better Statistics
  * Location: backend/models/User.php
  * 
- * Handles all user-related business logic and database operations
+ * Enhanced version that ensures accurate data retrieval and formatting
  */
 
 class User {
@@ -22,7 +22,11 @@ class User {
      */
     public function getAllUsers() {
         try {
-            $stmt = $this->pdo->query("SELECT id, name, color, created_at FROM users ORDER BY name");
+            $stmt = $this->pdo->query("
+                SELECT id, name, email, color, created_at, last_login 
+                FROM users 
+                ORDER BY name ASC
+            ");
             return $stmt->fetchAll();
         } catch (PDOException $e) {
             error_log("Error fetching users: " . $e->getMessage());
@@ -31,12 +35,13 @@ class User {
     }
     
     /**
-     * Get all users with event statistics
+     * Get all users with comprehensive event statistics
      * 
-     * @return array Array of users with stats
+     * @return array Array of users with detailed stats
      */
     public function getAllUsersWithStats() {
         try {
+            // First get all users
             $stmt = $this->pdo->query("
                 SELECT
                     u.id,
@@ -45,31 +50,130 @@ class User {
                     u.color,
                     u.created_at,
                     u.last_login,
-                    COUNT(e.id) as event_count
+                    u.password_hash
                 FROM users u
-                LEFT JOIN events e ON u.id = e.user_id
-                GROUP BY u.id, u.name, u.email, u.color, u.created_at, u.last_login
                 ORDER BY u.name ASC
             ");
             
             $users = $stmt->fetchAll();
             
-            // Format the data for better frontend consumption
-            return array_map(function($user) {
+            // Then get event counts for each user
+            $eventCountsQuery = $this->pdo->query("
+                SELECT 
+                    user_id,
+                    COUNT(*) as event_count,
+                    COUNT(CASE WHEN start_datetime >= NOW() THEN 1 END) as upcoming_events,
+                    COUNT(CASE WHEN start_datetime < NOW() THEN 1 END) as past_events,
+                    MIN(start_datetime) as first_event_date,
+                    MAX(start_datetime) as last_event_date
+                FROM events 
+                GROUP BY user_id
+            ");
+            
+            $eventCounts = [];
+            while ($row = $eventCountsQuery->fetch()) {
+                $eventCounts[$row['user_id']] = $row;
+            }
+            
+            // Format the data for frontend consumption
+            return array_map(function($user) use ($eventCounts) {
+                $userId = (int)$user['id'];
+                $eventStats = $eventCounts[$userId] ?? null;
+                
                 return [
-                    'id' => (int)$user['id'],
-                    'name' => $user['name'],
-                    'email' => $user['email'],
-                    'color' => $user['color'],
+                    'id' => $userId,
+                    'name' => $user['name'] ?: 'Unknown User',
+                    'email' => $user['email'] ?: null,
+                    'color' => $user['color'] ?: '#3498db',
                     'created_at' => $user['created_at'],
                     'last_login' => $user['last_login'],
-                    'event_count' => (int)$user['event_count'],
-                    'status' => $this->determineUserStatus($user['last_login'])
+                    'event_count' => $eventStats ? (int)$eventStats['event_count'] : 0,
+                    'upcoming_events' => $eventStats ? (int)$eventStats['upcoming_events'] : 0,
+                    'past_events' => $eventStats ? (int)$eventStats['past_events'] : 0,
+                    'first_event_date' => $eventStats ? $eventStats['first_event_date'] : null,
+                    'last_event_date' => $eventStats ? $eventStats['last_event_date'] : null,
+                    'status' => $this->determineUserStatus($user['last_login'], $user['password_hash']),
+                    'has_password' => !empty($user['password_hash']),
+                    'member_since' => $this->formatMemberSince($user['created_at'])
                 ];
             }, $users);
+            
         } catch (PDOException $e) {
             error_log("Error fetching users with stats: " . $e->getMessage());
             throw new Exception("Failed to fetch users with statistics");
+        }
+    }
+    
+    /**
+     * Get detailed user information by ID
+     * 
+     * @param int $userId User ID
+     * @return array|null User data with stats or null if not found
+     */
+    public function getUserWithStats($userId) {
+        try {
+            // Get user info
+            $stmt = $this->pdo->prepare("
+                SELECT id, name, email, color, created_at, last_login, password_hash
+                FROM users 
+                WHERE id = ?
+            ");
+            $stmt->execute([$userId]);
+            $user = $stmt->fetch();
+            
+            if (!$user) {
+                return null;
+            }
+            
+            // Get event statistics
+            $stmt = $this->pdo->prepare("
+                SELECT 
+                    COUNT(*) as total_events,
+                    COUNT(CASE WHEN start_datetime >= NOW() THEN 1 END) as upcoming_events,
+                    COUNT(CASE WHEN start_datetime < NOW() THEN 1 END) as past_events,
+                    MIN(start_datetime) as first_event,
+                    MAX(start_datetime) as latest_event,
+                    AVG(TIMESTAMPDIFF(MINUTE, start_datetime, end_datetime)) as avg_event_duration
+                FROM events 
+                WHERE user_id = ?
+            ");
+            $stmt->execute([$userId]);
+            $stats = $stmt->fetch();
+            
+            // Get recent events
+            $stmt = $this->pdo->prepare("
+                SELECT id, title, start_datetime, end_datetime
+                FROM events 
+                WHERE user_id = ? 
+                ORDER BY start_datetime DESC 
+                LIMIT 5
+            ");
+            $stmt->execute([$userId]);
+            $recentEvents = $stmt->fetchAll();
+            
+            return [
+                'id' => (int)$user['id'],
+                'name' => $user['name'],
+                'email' => $user['email'],
+                'color' => $user['color'],
+                'created_at' => $user['created_at'],
+                'last_login' => $user['last_login'],
+                'status' => $this->determineUserStatus($user['last_login'], $user['password_hash']),
+                'has_password' => !empty($user['password_hash']),
+                'statistics' => [
+                    'total_events' => (int)$stats['total_events'],
+                    'upcoming_events' => (int)$stats['upcoming_events'],
+                    'past_events' => (int)$stats['past_events'],
+                    'first_event' => $stats['first_event'],
+                    'latest_event' => $stats['latest_event'],
+                    'avg_event_duration' => $stats['avg_event_duration'] ? round($stats['avg_event_duration']) : 0
+                ],
+                'recent_events' => $recentEvents
+            ];
+            
+        } catch (PDOException $e) {
+            error_log("Error fetching user with stats: " . $e->getMessage());
+            throw new Exception("Failed to fetch user details");
         }
     }
     
@@ -81,7 +185,11 @@ class User {
      */
     public function getUserById($userId) {
         try {
-            $stmt = $this->pdo->prepare("SELECT id, name, email, color, created_at, last_login FROM users WHERE id = ?");
+            $stmt = $this->pdo->prepare("
+                SELECT id, name, email, color, created_at, last_login 
+                FROM users 
+                WHERE id = ?
+            ");
             $stmt->execute([$userId]);
             return $stmt->fetch();
         } catch (PDOException $e) {
@@ -98,7 +206,11 @@ class User {
      */
     public function getUserByName($name) {
         try {
-            $stmt = $this->pdo->prepare("SELECT id, name, email, color, created_at, last_login FROM users WHERE name = ?");
+            $stmt = $this->pdo->prepare("
+                SELECT id, name, email, color, created_at, last_login 
+                FROM users 
+                WHERE name = ?
+            ");
             $stmt->execute([$name]);
             return $stmt->fetch();
         } catch (PDOException $e) {
@@ -259,72 +371,6 @@ class User {
     }
     
     /**
-     * Delete a user and all associated data
-     * 
-     * @param int $userId User ID
-     * @return bool Success status
-     */
-    public function deleteUser($userId) {
-        try {
-            // Start transaction
-            $this->pdo->beginTransaction();
-            
-            // Delete user's events (handled by foreign key cascade)
-            // Delete user's sessions (handled by foreign key cascade)
-            
-            // Delete user
-            $stmt = $this->pdo->prepare("DELETE FROM users WHERE id = ?");
-            $stmt->execute([$userId]);
-            
-            if ($stmt->rowCount() === 0) {
-                $this->pdo->rollBack();
-                throw new Exception('User not found');
-            }
-            
-            // Commit transaction
-            $this->pdo->commit();
-            
-            // Broadcast user deletion if CalendarUpdate is available
-            if ($this->calendarUpdate) {
-                $this->calendarUpdate->broadcastUpdate('user_deleted', ['id' => $userId]);
-            }
-            
-            return true;
-            
-        } catch (Exception $e) {
-            $this->pdo->rollBack();
-            error_log("Error deleting user: " . $e->getMessage());
-            throw new Exception('Failed to delete user');
-        }
-    }
-    
-    /**
-     * Get user statistics
-     * 
-     * @param int $userId User ID
-     * @return array User statistics
-     */
-    public function getUserStats($userId) {
-        try {
-            $stmt = $this->pdo->prepare("
-                SELECT 
-                    COUNT(e.id) as total_events,
-                    COUNT(CASE WHEN e.start_datetime >= CURDATE() THEN 1 END) as upcoming_events,
-                    COUNT(CASE WHEN e.start_datetime < CURDATE() THEN 1 END) as past_events,
-                    MIN(e.start_datetime) as first_event,
-                    MAX(e.start_datetime) as last_event
-                FROM events e 
-                WHERE e.user_id = ?
-            ");
-            $stmt->execute([$userId]);
-            return $stmt->fetch();
-        } catch (PDOException $e) {
-            error_log("Error fetching user stats: " . $e->getMessage());
-            throw new Exception('Failed to fetch user statistics');
-        }
-    }
-    
-    /**
      * Search users by name or email
      * 
      * @param string $query Search query
@@ -349,6 +395,111 @@ class User {
             error_log("Error searching users: " . $e->getMessage());
             throw new Exception('Failed to search users');
         }
+    }
+    
+    /**
+     * Get total user count
+     * 
+     * @return int Total number of users
+     */
+    public function getUserCount() {
+        try {
+            $stmt = $this->pdo->query("SELECT COUNT(*) FROM users");
+            return (int)$stmt->fetchColumn();
+        } catch (PDOException $e) {
+            error_log("Error getting user count: " . $e->getMessage());
+            return 0;
+        }
+    }
+    
+    /**
+     * Get user activity summary
+     * 
+     * @param int $days Number of days to look back
+     * @return array Activity summary
+     */
+    public function getUserActivity($days = 30) {
+        try {
+            $stmt = $this->pdo->prepare("
+                SELECT 
+                    COUNT(DISTINCT u.id) as total_users,
+                    COUNT(DISTINCT CASE WHEN u.last_login >= DATE_SUB(NOW(), INTERVAL ? DAY) THEN u.id END) as active_users,
+                    COUNT(DISTINCT CASE WHEN u.created_at >= DATE_SUB(NOW(), INTERVAL ? DAY) THEN u.id END) as new_users,
+                    COUNT(DISTINCT CASE WHEN e.created_at >= DATE_SUB(NOW(), INTERVAL ? DAY) THEN e.user_id END) as users_with_events
+                FROM users u
+                LEFT JOIN events e ON u.id = e.user_id
+            ");
+            $stmt->execute([$days, $days, $days]);
+            
+            return $stmt->fetch();
+        } catch (PDOException $e) {
+            error_log("Error getting user activity: " . $e->getMessage());
+            return [];
+        }
+    }
+    
+    /**
+     * Determine user status based on last login and account type
+     * 
+     * @param string|null $lastLogin Last login timestamp
+     * @param string|null $passwordHash Whether user has a password (registered vs guest)
+     * @return string User status (active, inactive, new, guest)
+     */
+    private function determineUserStatus($lastLogin, $passwordHash = null) {
+        // If no password hash, it's a guest user (legacy users without registration)
+        if (empty($passwordHash)) {
+            return 'guest';
+        }
+        
+        // If never logged in, it's a new registered user
+        if (!$lastLogin || $lastLogin === '0000-00-00 00:00:00') {
+            return 'new';
+        }
+        
+        try {
+            $lastLoginDate = new DateTime($lastLogin);
+            $now = new DateTime();
+            $daysDiff = $now->diff($lastLoginDate)->days;
+            
+            if ($daysDiff <= 1) {
+                return 'active';
+            } else if ($daysDiff <= 7) {
+                return 'recent';
+            } else {
+                return 'inactive';
+            }
+        } catch (Exception $e) {
+            return 'unknown';
+        }
+    }
+    
+    /**
+     * Format member since date in a human-readable way
+     * 
+     * @param string $createdAt Created timestamp
+     * @return string Formatted member since date
+     */
+    private function formatMemberSince($createdAt) {
+        if (!$createdAt) {
+            return 'Unknown';
+        }
+        
+        try {
+            $created = new DateTime($createdAt);
+            return $created->format('M j, Y');
+        } catch (Exception $e) {
+            return 'Unknown';
+        }
+    }
+    
+    /**
+     * Validate email format
+     * 
+     * @param string $email Email to validate
+     * @return bool True if valid, false otherwise
+     */
+    public function validateEmail($email) {
+        return filter_var($email, FILTER_VALIDATE_EMAIL) !== false;
     }
     
     /**
@@ -382,57 +533,6 @@ class User {
         } catch (PDOException $e) {
             error_log("Error checking user existence by email: " . $e->getMessage());
             return false;
-        }
-    }
-    
-    /**
-     * Determine user status based on last login
-     * 
-     * @param string|null $lastLogin Last login timestamp
-     * @return string User status (active, inactive, new)
-     */
-    private function determineUserStatus($lastLogin) {
-        if (!$lastLogin || $lastLogin === '0000-00-00 00:00:00') {
-            return 'new';
-        }
-        
-        try {
-            $lastLoginDate = new DateTime($lastLogin);
-            $now = new DateTime();
-            $daysDiff = $now->diff($lastLoginDate)->days;
-            
-            if ($daysDiff <= 1) {
-                return 'active';
-            } else {
-                return 'inactive';
-            }
-        } catch (Exception $e) {
-            return 'unknown';
-        }
-    }
-    
-    /**
-     * Validate email format
-     * 
-     * @param string $email Email to validate
-     * @return bool True if valid, false otherwise
-     */
-    public function validateEmail($email) {
-        return filter_var($email, FILTER_VALIDATE_EMAIL) !== false;
-    }
-    
-    /**
-     * Get user count
-     * 
-     * @return int Total number of users
-     */
-    public function getUserCount() {
-        try {
-            $stmt = $this->pdo->query("SELECT COUNT(*) FROM users");
-            return (int)$stmt->fetchColumn();
-        } catch (PDOException $e) {
-            error_log("Error getting user count: " . $e->getMessage());
-            return 0;
         }
     }
 }
