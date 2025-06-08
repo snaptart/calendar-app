@@ -1,374 +1,222 @@
-// Frontend JavaScript for collaborative calendar - FIXED VERSION
+// Modular Collaborative Calendar Application
 // Location: frontend/js/script.js
+// 
+// This refactored version separates concerns into distinct, reusable components
+// using functional programming patterns and an event-driven architecture.
 
-class CollaborativeCalendar {
-    constructor() {
-        this.calendar = null;
-        this.eventSource = null;
-        this.currentUser = '';
-        this.currentUserId = null;
-        this.selectedUsers = new Set();
-        this.allUsers = [];
-        this.currentEvent = null;
-        this.lastEventId = 0;
-        this.reconnectAttempts = 0;
-        this.isConnected = false;
-        this.processedEventIds = new Set(); // Track processed events to prevent duplicates
-        this.eventProcessingTimeout = null;
+// =============================================================================
+// CORE UTILITIES AND EVENT BUS
+// =============================================================================
+
+/**
+ * Simple Event Bus for component communication
+ */
+const EventBus = (() => {
+    const events = {};
+    
+    return {
+        on(event, callback) {
+            if (!events[event]) events[event] = [];
+            events[event].push(callback);
+        },
         
-        // API endpoints - relative to frontend location
-        this.apiEndpoints = {
-            api: '../../backend/api.php',
-            sse: '../../backend/workers/sse.php'
+        off(event, callback) {
+            if (!events[event]) return;
+            events[event] = events[event].filter(cb => cb !== callback);
+        },
+        
+        emit(event, data) {
+            if (!events[event]) return;
+            events[event].forEach(callback => {
+                try {
+                    callback(data);
+                } catch (error) {
+                    console.error(`Error in event listener for ${event}:`, error);
+                }
+            });
+        }
+    };
+})();
+
+/**
+ * Configuration object for API endpoints
+ */
+const Config = {
+    apiEndpoints: {
+        api: '../../backend/api.php',
+        sse: '../../backend/workers/sse.php'
+    },
+    calendar: {
+        defaultView: 'dayGridMonth',
+        snapDuration: '00:05:00',
+        timeInterval: 15 // minutes
+    },
+    sse: {
+        maxReconnectAttempts: 10,
+        baseReconnectDelay: 1000,
+        maxReconnectDelay: 30000
+    }
+};
+
+/**
+ * Utility functions
+ */
+const Utils = {
+    debounce(func, wait) {
+        let timeout;
+        return function executedFunction(...args) {
+            const later = () => {
+                clearTimeout(timeout);
+                func(...args);
+            };
+            clearTimeout(timeout);
+            timeout = setTimeout(later, wait);
         };
-        
-        this.init();
-    }
+    },
     
-    init() {
-        this.initializeDatetimePickers();
-        this.initializeCalendar();
-        this.setupEventListeners();
-        this.setupSSE();
-        this.loadUsers();
-    }
-    
-    initializeDatetimePickers() {
-        // Initialize xdsoft datetimepicker for event start and end inputs
-        const datetimePickerOptions = {
-            format: 'Y-m-d H:i',
-            formatTime: 'H:i',
-            formatDate: 'Y-m-d',
-            step: 15, // 15-minute intervals
-            minDate: false,
-            maxDate: false,
-            allowTimes: [],
-            opened: false,
-            defaultTime: '09:00',
-            timepicker: true,
-            datepicker: true,
-            weeks: false,
-            theme: 'default',
-            lang: 'en',
-            yearStart: new Date().getFullYear() - 5,
-            yearEnd: new Date().getFullYear() + 5,
-            todayButton: true,
-            defaultSelect: false,
-            scrollMonth: false,
-            scrollTime: false,
-            scrollInput: false,
-            lazyInit: false,
-            mask: false,
-            validateOnBlur: true,
-            allowBlank: false,
-            closeOnDateSelect: false,
-            closeOnTimeSelect: true,
-            closeOnWithoutClick: true,
-            timepickerScrollbar: true,
-            onSelectDate: function(ct, $i) {
-                // Auto-set end time to 1 hour after start time if this is the start picker
-                if ($i.attr('id') === 'eventStart') {
-                    const endPicker = $('#eventEnd');
-                    if (!endPicker.val()) {
-                        const endTime = new Date(ct.getTime() + 60 * 60 * 1000); // Add 1 hour
-                        endPicker.datetimepicker('setOptions', {
-                            value: endTime,
-                            minDate: ct
-                        });
-                    } else {
-                        endPicker.datetimepicker('setOptions', {
-                            minDate: ct
-                        });
-                    }
-                }
-            },
-            onSelectTime: function(ct, $i) {
-                // Auto-set end time to 1 hour after start time if this is the start picker
-                if ($i.attr('id') === 'eventStart') {
-                    const endPicker = $('#eventEnd');
-                    if (!endPicker.val()) {
-                        const endTime = new Date(ct.getTime() + 60 * 60 * 1000); // Add 1 hour
-                        endPicker.datetimepicker('setOptions', {
-                            value: endTime,
-                            minDate: ct
-                        });
-                    } else {
-                        endPicker.datetimepicker('setOptions', {
-                            minDate: ct
-                        });
-                    }
-                }
-            }
-        };
+    formatDateTimeForAPI(dateTimeStr) {
+        if (!dateTimeStr) return '';
         
-        // Initialize both datetime pickers
-        $('#eventStart').datetimepicker(datetimePickerOptions);
-        $('#eventEnd').datetimepicker(datetimePickerOptions);
-        
-        // Set minimum date for end picker when start changes
-        $('#eventStart').on('change', function() {
-            const startDate = $(this).datetimepicker('getValue');
-            if (startDate) {
-                $('#eventEnd').datetimepicker('setOptions', {
-                    minDate: startDate
-                });
-                
-                // If end date is before start date, update it
-                const endDate = $('#eventEnd').datetimepicker('getValue');
-                if (!endDate || endDate <= startDate) {
-                    const newEndDate = new Date(startDate.getTime() + 60 * 60 * 1000);
-                    $('#eventEnd').datetimepicker('setOptions', {
-                        value: newEndDate
-                    });
-                }
-            }
-        });
-    }
-    
-    initializeCalendar() {
-        const calendarEl = document.getElementById('calendar');
-        
-        this.calendar = new FullCalendar.Calendar(calendarEl, {
-            initialView: 'dayGridMonth',
-            headerToolbar: {
-                left: 'prev,next today',
-                center: 'title',
-                right: 'dayGridMonth,timeGridWeek,timeGridDay,listWeek'
-            },
-            
-            // CRITICAL: Enable editing for drag and drop
-            editable: true,
-            selectable: true,
-            selectMirror: true,
-            snapDuration: '00:05:00',
-            
-            // Enable event interaction
-            eventStartEditable: true,
-            eventDurationEditable: true,
-            eventResizableFromStart: true,
-            
-            // Visual settings
-            dayMaxEvents: true,
-            weekends: true,
-            height: 'auto',
-            
-            // Events array
-            events: [],
-            
-            // Event handlers for interaction
-            select: (info) => this.handleDateSelect(info),
-            eventClick: (info) => this.handleEventClick(info),
-            eventDrop: (info) => this.handleEventMove(info),
-            eventResize: (info) => this.handleEventResize(info),
-            
-            // Add visual feedback during drag
-            eventMouseEnter: (info) => this.handleEventMouseEnter(info),
-            eventMouseLeave: (info) => this.handleEventMouseLeave(info),
-            
-            // Validate before allowing drag/drop
-            eventAllow: (dropInfo, draggedEvent) => {
-                return this.validateEventEdit(draggedEvent);
-            },
-            
-            // Additional drag feedback
-            eventDragStart: (info) => this.handleEventDragStart(info),
-            eventDragStop: (info) => this.handleEventDragStop(info),
-            eventResizeStart: (info) => this.handleEventResizeStart(info),
-            eventResizeStop: (info) => this.handleEventResizeStop(info)
-        });
-        
-        this.calendar.render();
-    }
-    
-    setupEventListeners() {
-        // User name input
-        const userNameInput = document.getElementById('userName');
-        userNameInput.addEventListener('change', (e) => {
-            this.setCurrentUser(e.target.value.trim());
-        });
-        
-        // Also trigger on blur and Enter key
-        userNameInput.addEventListener('blur', (e) => {
-            this.setCurrentUser(e.target.value.trim());
-        });
-        
-        userNameInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                this.setCurrentUser(e.target.value.trim());
-            }
-        });
-        
-        // Add event button
-        document.getElementById('addEventBtn').addEventListener('click', () => {
-            this.openEventModal();
-        });
-        
-        // Refresh users button
-        document.getElementById('refreshUsers').addEventListener('click', () => {
-            this.loadUsers();
-        });
-        
-        // Modal event listeners
-        this.setupModalListeners();
-    }
-    
-    setupModalListeners() {
-        const modal = document.getElementById('eventModal');
-        const closeBtn = modal.querySelector('.close');
-        const cancelBtn = document.getElementById('cancelBtn');
-        const eventForm = document.getElementById('eventForm');
-        const deleteBtn = document.getElementById('deleteEventBtn');
-        
-        // Close modal
-        [closeBtn, cancelBtn].forEach(btn => {
-            btn.addEventListener('click', () => this.closeEventModal());
-        });
-        
-        // Close on outside click
-        modal.addEventListener('click', (e) => {
-            if (e.target === modal) this.closeEventModal();
-        });
-        
-        // Form submission
-        eventForm.addEventListener('submit', (e) => {
-            e.preventDefault();
-            this.saveEvent();
-        });
-        
-        // Delete event
-        deleteBtn.addEventListener('click', () => {
-            this.deleteEvent();
-        });
-    }
-    
-    setupSSE() {
-        this.connectSSE();
-    }
-    
-    connectSSE() {
-        if (this.eventSource) {
-            this.eventSource.close();
-            this.isConnected = false;
+        const parts = dateTimeStr.split(' ');
+        if (parts.length === 2) {
+            return `${parts[0]} ${parts[1]}:00`;
         }
         
-        this.updateConnectionStatus('Connecting...');
-        console.log('Attempting SSE connection with lastEventId:', this.lastEventId);
+        const date = new Date(dateTimeStr);
+        if (isNaN(date.getTime())) return '';
         
-        this.eventSource = new EventSource(`${this.apiEndpoints.sse}?lastEventId=${this.lastEventId}`);
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        const hours = String(date.getHours()).padStart(2, '0');
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        const seconds = String(date.getSeconds()).padStart(2, '0');
         
-        this.eventSource.onopen = () => {
-            this.updateConnectionStatus('Connected', 'connected');
-            this.isConnected = true;
-            this.reconnectAttempts = 0; // Reset on successful connection
-            console.log('SSE connection established');
-        };
-        
-        this.eventSource.onerror = (e) => {
-            console.log('SSE connection error:', e);
-            this.updateConnectionStatus('Disconnected', 'disconnected');
-            this.isConnected = false;
-            this.eventSource.close();
-            
-            // Exponential backoff for reconnection
-            this.reconnectAttempts = (this.reconnectAttempts || 0) + 1;
-            const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 30000); // Max 30 seconds
-            
-            console.log(`SSE connection failed. Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts})`);
-            setTimeout(() => this.connectSSE(), delay);
-        };
-        
-        // FIXED: Add duplicate prevention for SSE events
-        this.eventSource.addEventListener('create', (e) => {
-            const eventData = JSON.parse(e.data);
-            const eventId = `create-${eventData.id}`;
-            
-            if (!this.processedEventIds.has(eventId)) {
-                this.processedEventIds.add(eventId);
-                console.log('SSE: Creating event', eventData.id);
-                this.addEventToCalendar(eventData);
-                this.lastEventId = parseInt(e.lastEventId) || this.lastEventId;
-                
-                // Clean up processed IDs after 5 minutes
-                setTimeout(() => this.processedEventIds.delete(eventId), 300000);
-            } else {
-                console.log('SSE: Skipping duplicate create event', eventData.id);
-            }
-        });
-        
-        this.eventSource.addEventListener('update', (e) => {
-            const eventData = JSON.parse(e.data);
-            const eventId = `update-${eventData.id}-${e.lastEventId}`;
-            
-            if (!this.processedEventIds.has(eventId)) {
-                this.processedEventIds.add(eventId);
-                console.log('SSE: Updating event', eventData.id);
-                this.updateEventInCalendar(eventData);
-                this.lastEventId = parseInt(e.lastEventId) || this.lastEventId;
-                
-                // Clean up processed IDs after 5 minutes
-                setTimeout(() => this.processedEventIds.delete(eventId), 300000);
-            } else {
-                console.log('SSE: Skipping duplicate update event', eventData.id);
-            }
-        });
-        
-        this.eventSource.addEventListener('delete', (e) => {
-            const eventData = JSON.parse(e.data);
-            const eventId = `delete-${eventData.id}`;
-            
-            if (!this.processedEventIds.has(eventId)) {
-                this.processedEventIds.add(eventId);
-                console.log('SSE: Deleting event', eventData.id);
-                this.removeEventFromCalendar(eventData.id);
-                this.lastEventId = parseInt(e.lastEventId) || this.lastEventId;
-                
-                // Clean up processed IDs after 5 minutes
-                setTimeout(() => this.processedEventIds.delete(eventId), 300000);
-            } else {
-                console.log('SSE: Skipping duplicate delete event', eventData.id);
-            }
-        });
-        
-        this.eventSource.addEventListener('user_created', (e) => {
-            // Refresh users list when a new user is created
-            console.log('SSE: User created, refreshing users list');
-            this.loadUsers();
-            this.lastEventId = parseInt(e.lastEventId) || this.lastEventId;
-        });
-        
-        this.eventSource.addEventListener('heartbeat', (e) => {
-            // Keep connection alive - don't log this as it's too frequent
-            this.lastEventId = parseInt(e.lastEventId) || this.lastEventId;
-        });
-        
-        this.eventSource.addEventListener('reconnect', (e) => {
-            console.log('SSE: Server requested reconnect');
-            this.lastEventId = parseInt(e.lastEventId) || this.lastEventId;
-            this.connectSSE(); // Graceful reconnect
-        });
-        
-        this.eventSource.addEventListener('timeout', () => {
-            console.log('SSE: Connection timeout, reconnecting');
-            this.connectSSE(); // Reconnect on timeout
-        });
-    }
+        return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+    },
     
-    async loadUsers() {
+    parseEventDateTime(dateTimeStr) {
+        if (!dateTimeStr) return new Date();
+        
+        let date;
+        if (dateTimeStr.includes('T')) {
+            date = new Date(dateTimeStr);
+        } else if (dateTimeStr.includes(' ')) {
+            date = new Date(dateTimeStr.replace(' ', 'T'));
+        } else {
+            date = new Date(dateTimeStr + 'T09:00:00');
+        }
+        
+        return isNaN(date.getTime()) ? new Date() : date;
+    },
+    
+    generateEventId() {
+        return Math.random().toString(36).substr(2, 9);
+    }
+};
+
+// =============================================================================
+// API CLIENT
+// =============================================================================
+
+/**
+ * Centralized API communication
+ */
+const APIClient = (() => {
+    const makeRequest = async (url, options = {}) => {
         try {
-            const response = await fetch(`${this.apiEndpoints.api}?action=users`);
-            const users = await response.json();
-            this.allUsers = users;
-            this.renderUserCheckboxes();
+            const response = await fetch(url, {
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...options.headers
+                },
+                ...options
+            });
+            
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            return await response.json();
         } catch (error) {
-            console.error('Error loading users:', error);
+            console.error('API Request failed:', error);
+            throw error;
         }
-    }
+    };
     
-    renderUserCheckboxes() {
+    return {
+        // User operations
+        getUsers() {
+            return makeRequest(`${Config.apiEndpoints.api}?action=users`);
+        },
+        
+        createUser(userName) {
+            return makeRequest(Config.apiEndpoints.api, {
+                method: 'POST',
+                body: JSON.stringify({
+                    action: 'create_user',
+                    userName
+                })
+            });
+        },
+        
+        // Event operations
+        getEvents(userIds = []) {
+            const userIdsParam = userIds.length ? `&user_ids=${userIds.join(',')}` : '';
+            return makeRequest(`${Config.apiEndpoints.api}?action=events${userIdsParam}`);
+        },
+        
+        createEvent(eventData) {
+            return makeRequest(Config.apiEndpoints.api, {
+                method: 'POST',
+                body: JSON.stringify(eventData)
+            });
+        },
+        
+        updateEvent(eventData) {
+            return makeRequest(Config.apiEndpoints.api, {
+                method: 'PUT',
+                body: JSON.stringify(eventData)
+            });
+        },
+        
+        deleteEvent(eventId) {
+            return makeRequest(`${Config.apiEndpoints.api}?id=${eventId}`, {
+                method: 'DELETE'
+            });
+        },
+        
+        // Test endpoint
+        testConnection() {
+            return makeRequest(`${Config.apiEndpoints.api}?action=test`);
+        }
+    };
+})();
+
+// =============================================================================
+// USER MANAGER
+// =============================================================================
+
+/**
+ * Manages user operations and selection
+ */
+const UserManager = (() => {
+    let currentUser = null;
+    let allUsers = [];
+    let selectedUserIds = new Set();
+    
+    const validateUserName = (userName) => {
+        return userName && userName.trim().length > 0;
+    };
+    
+    const renderUserCheckboxes = () => {
         const container = document.getElementById('userCheckboxes');
+        if (!container) return;
+        
         container.innerHTML = '';
         
-        this.allUsers.forEach(user => {
+        allUsers.forEach(user => {
             const checkboxItem = document.createElement('div');
             checkboxItem.className = 'checkbox-item';
             
@@ -376,7 +224,7 @@ class CollaborativeCalendar {
             checkbox.type = 'checkbox';
             checkbox.id = `user-${user.id}`;
             checkbox.value = user.id;
-            checkbox.checked = this.selectedUsers.has(user.id.toString());
+            checkbox.checked = selectedUserIds.has(user.id.toString());
             
             const colorDot = document.createElement('div');
             colorDot.className = 'user-color';
@@ -391,537 +239,1006 @@ class CollaborativeCalendar {
             checkboxItem.appendChild(colorDot);
             checkboxItem.appendChild(label);
             
-            // Update visual state
             if (checkbox.checked) {
                 checkboxItem.classList.add('checked');
             }
             
-            // Event listener
             checkbox.addEventListener('change', (e) => {
                 if (e.target.checked) {
-                    this.selectedUsers.add(user.id.toString());
+                    selectedUserIds.add(user.id.toString());
                     checkboxItem.classList.add('checked');
                 } else {
-                    this.selectedUsers.delete(user.id.toString());
+                    selectedUserIds.delete(user.id.toString());
                     checkboxItem.classList.remove('checked');
                 }
-                this.loadEvents();
+                
+                EventBus.emit('users:selectionChanged', {
+                    selectedUserIds: Array.from(selectedUserIds)
+                });
             });
             
             container.appendChild(checkboxItem);
         });
-    }
+    };
     
-    async setCurrentUser(userName) {
-        if (!userName) {
-            this.currentUser = '';
-            this.currentUserId = null;
-            this.updateUserStatus('');
+    const loadUsers = async () => {
+        try {
+            const users = await APIClient.getUsers();
+            allUsers = users;
+            renderUserCheckboxes();
+            
+            EventBus.emit('users:loaded', { users });
+        } catch (error) {
+            console.error('Error loading users:', error);
+            EventBus.emit('users:error', { error });
+        }
+    };
+    
+    const setCurrentUser = async (userName) => {
+        if (!validateUserName(userName)) {
+            currentUser = null;
+            EventBus.emit('user:cleared');
             return;
         }
         
         try {
-            // Create or get user from database
-            const response = await fetch(this.apiEndpoints.api, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    action: 'create_user',
-                    userName: userName
-                })
-            });
+            const userData = await APIClient.createUser(userName.trim());
+            currentUser = userData;
             
-            if (!response.ok) {
-                throw new Error('Failed to create/get user');
-            }
+            // Auto-select current user's calendar
+            selectedUserIds.add(userData.id.toString());
             
-            const userData = await response.json();
+            EventBus.emit('user:set', { user: userData });
             
-            this.currentUser = userData.name;
-            this.currentUserId = userData.id;
-            this.updateUserStatus(`Set as: ${userData.name}`, 'user-set');
-            
-            // Refresh users list to include the new user
-            await this.loadUsers();
-            
-            // Auto-select the current user's calendar
-            this.selectedUsers.add(userData.id.toString());
-            this.renderUserCheckboxes();
-            this.loadEvents();
+            // Refresh users list and reload events
+            await loadUsers();
             
         } catch (error) {
             console.error('Error setting current user:', error);
-            this.updateUserStatus('Error setting user', 'disconnected');
+            EventBus.emit('user:error', { error });
         }
-    }
+    };
     
-    async loadEvents() {
-        if (this.selectedUsers.size === 0) {
-            this.calendar.removeAllEvents();
-            return;
+    const getCurrentUser = () => currentUser;
+    const getAllUsers = () => allUsers;
+    const getSelectedUserIds = () => Array.from(selectedUserIds);
+    
+    const canUserEditEvent = (event) => {
+        return currentUser && event.extendedProps.userName === currentUser.name;
+    };
+    
+    // Event listeners
+    EventBus.on('app:init', loadUsers);
+    
+    return {
+        setCurrentUser,
+        getCurrentUser,
+        getAllUsers,
+        getSelectedUserIds,
+        canUserEditEvent,
+        loadUsers
+    };
+})();
+
+// =============================================================================
+// DATE TIME MANAGER
+// =============================================================================
+
+/**
+ * Manages datetime picker functionality
+ */
+const DateTimeManager = (() => {
+    const initializeDateTimePickers = () => {
+        const options = {
+            format: 'Y-m-d H:i',
+            formatTime: 'H:i',
+            formatDate: 'Y-m-d',
+            step: Config.calendar.timeInterval,
+            minDate: false,
+            maxDate: false,
+            defaultTime: '09:00',
+            timepicker: true,
+            datepicker: true,
+            weeks: false,
+            theme: 'default',
+            lang: 'en',
+            yearStart: new Date().getFullYear() - 5,
+            yearEnd: new Date().getFullYear() + 5,
+            todayButton: true,
+            closeOnDateSelect: false,
+            closeOnTimeSelect: true,
+            closeOnWithoutClick: true,
+            timepickerScrollbar: true,
+            onSelectDate: function(ct, $i) {
+                if ($i.attr('id') === 'eventStart') {
+                    const endPicker = $('#eventEnd');
+                    if (!endPicker.val()) {
+                        const endTime = new Date(ct.getTime() + 60 * 60 * 1000);
+                        endPicker.datetimepicker('setOptions', {
+                            value: endTime,
+                            minDate: ct
+                        });
+                    } else {
+                        endPicker.datetimepicker('setOptions', { minDate: ct });
+                    }
+                }
+            },
+            onSelectTime: function(ct, $i) {
+                if ($i.attr('id') === 'eventStart') {
+                    const endPicker = $('#eventEnd');
+                    if (!endPicker.val()) {
+                        const endTime = new Date(ct.getTime() + 60 * 60 * 1000);
+                        endPicker.datetimepicker('setOptions', {
+                            value: endTime,
+                            minDate: ct
+                        });
+                    } else {
+                        endPicker.datetimepicker('setOptions', { minDate: ct });
+                    }
+                }
+            }
+        };
+        
+        $('#eventStart, #eventEnd').datetimepicker(options);
+        
+        $('#eventStart').on('change', function() {
+            const startDate = $(this).datetimepicker('getValue');
+            if (startDate) {
+                $('#eventEnd').datetimepicker('setOptions', { minDate: startDate });
+                
+                const endDate = $('#eventEnd').datetimepicker('getValue');
+                if (!endDate || endDate <= startDate) {
+                    const newEndDate = new Date(startDate.getTime() + 60 * 60 * 1000);
+                    $('#eventEnd').datetimepicker('setOptions', { value: newEndDate });
+                }
+            }
+        });
+    };
+    
+    const setDateTimeValues = (startDate, endDate) => {
+        if (startDate) {
+            const start = Utils.parseEventDateTime(startDate);
+            $('#eventStart').datetimepicker('setOptions', { value: start });
         }
         
-        try {
-            const userIds = Array.from(this.selectedUsers).join(',');
-            const response = await fetch(`${this.apiEndpoints.api}?action=events&user_ids=${userIds}`);
-            const events = await response.json();
-            
-            console.log('Loading events for users:', userIds, 'Found:', events.length, 'events');
-            
-            // Clear and add events
-            this.calendar.removeAllEvents();
-            events.forEach(event => {
-                this.calendar.addEvent(event);
-            });
-        } catch (error) {
-            console.error('Error loading events:', error);
+        if (endDate) {
+            const end = Utils.parseEventDateTime(endDate);
+            $('#eventEnd').datetimepicker('setOptions', { value: end });
         }
-    }
+    };
     
-    // FIXED: Debounced event processing to prevent excessive API calls
-    debounceEventProcessing(callback, delay = 100) {
-        if (this.eventProcessingTimeout) {
-            clearTimeout(this.eventProcessingTimeout);
+    const clearDateTimeValues = () => {
+        $('#eventStart, #eventEnd').val('');
+    };
+    
+    const getDateTimeValues = () => {
+        return {
+            start: $('#eventStart').val(),
+            end: $('#eventEnd').val()
+        };
+    };
+    
+    const setDefaultDateTime = () => {
+        const now = new Date();
+        const roundedMinutes = Math.ceil(now.getMinutes() / Config.calendar.timeInterval) * Config.calendar.timeInterval;
+        now.setMinutes(roundedMinutes, 0, 0);
+        
+        const endTime = new Date(now.getTime() + 60 * 60 * 1000);
+        
+        $('#eventStart').datetimepicker('setOptions', { value: now });
+        $('#eventEnd').datetimepicker('setOptions', { value: endTime });
+    };
+    
+    return {
+        initializeDateTimePickers,
+        setDateTimeValues,
+        clearDateTimeValues,
+        getDateTimeValues,
+        setDefaultDateTime
+    };
+})();
+
+// =============================================================================
+// UI MANAGER
+// =============================================================================
+
+/**
+ * Manages UI updates and visual feedback
+ */
+const UIManager = (() => {
+    const updateConnectionStatus = (message, className = '') => {
+        const statusEl = document.getElementById('connectionStatus');
+        if (statusEl) {
+            statusEl.textContent = message;
+            statusEl.className = `status ${className}`;
+            statusEl.style.backgroundColor = '';
+            statusEl.style.color = '';
         }
-        this.eventProcessingTimeout = setTimeout(callback, delay);
-    }
+    };
     
-    // NEW: Validate if user can edit event before allowing drag/drop
-    validateEventEdit(event) {
-        if (!this.currentUser) {
+    const updateUserStatus = (message, className = '') => {
+        const statusEl = document.getElementById('userStatus');
+        if (statusEl) {
+            statusEl.textContent = message;
+            statusEl.className = `status ${className}`;
+        }
+    };
+    
+    const showDragFeedback = (message) => {
+        const statusEl = document.getElementById('connectionStatus');
+        if (statusEl) {
+            statusEl.textContent = message;
+            statusEl.className = 'status';
+            statusEl.style.backgroundColor = '#f39c12';
+            statusEl.style.color = 'white';
+        }
+    };
+    
+    const hideDragFeedback = () => {
+        setTimeout(() => {
+            updateConnectionStatus('Connected', 'connected');
+        }, 1000);
+    };
+    
+    const showNotification = (message, type = 'info') => {
+        // Simple notification system - could be enhanced
+        console.log(`[${type.toUpperCase()}] ${message}`);
+        
+        // You could implement a toast notification system here
+        if (type === 'error') {
+            alert(message);
+        }
+    };
+    
+    // Event listeners
+    EventBus.on('connection:status', ({ status, message }) => {
+        updateConnectionStatus(message, status);
+    });
+    
+    EventBus.on('user:set', ({ user }) => {
+        updateUserStatus(`Set as: ${user.name}`, 'user-set');
+    });
+    
+    EventBus.on('user:cleared', () => {
+        updateUserStatus('');
+    });
+    
+    EventBus.on('user:error', ({ error }) => {
+        updateUserStatus('Error setting user', 'disconnected');
+        showNotification(`Error setting user: ${error.message}`, 'error');
+    });
+    
+    EventBus.on('drag:start', ({ message }) => {
+        showDragFeedback(message);
+    });
+    
+    EventBus.on('drag:stop', () => {
+        hideDragFeedback();
+    });
+    
+    return {
+        updateConnectionStatus,
+        updateUserStatus,
+        showDragFeedback,
+        hideDragFeedback,
+        showNotification
+    };
+})();
+
+// =============================================================================
+// MODAL MANAGER
+// =============================================================================
+
+/**
+ * Manages modal dialogs for event creation/editing
+ */
+const ModalManager = (() => {
+    let currentEvent = null;
+    
+    const openModal = (eventData = {}) => {
+        const modal = document.getElementById('eventModal');
+        const modalTitle = document.getElementById('modalTitle');
+        const deleteBtn = document.getElementById('deleteEventBtn');
+        
+        if (!modal) return;
+        
+        // Set form values
+        document.getElementById('eventTitle').value = eventData.title || '';
+        
+        // Set datetime values
+        if (eventData.start || eventData.end) {
+            DateTimeManager.setDateTimeValues(eventData.start, eventData.end);
+        } else {
+            DateTimeManager.setDefaultDateTime();
+        }
+        
+        // Update modal state
+        if (eventData.id) {
+            modalTitle.textContent = 'Edit Event';
+            deleteBtn.style.display = 'inline-block';
+            currentEvent = eventData;
+        } else {
+            modalTitle.textContent = 'Add Event';
+            deleteBtn.style.display = 'none';
+            currentEvent = null;
+        }
+        
+        modal.style.display = 'block';
+        document.getElementById('eventTitle').focus();
+        
+        EventBus.emit('modal:opened', { event: eventData });
+    };
+    
+    const closeModal = () => {
+        const modal = document.getElementById('eventModal');
+        if (modal) {
+            modal.style.display = 'none';
+        }
+        
+        currentEvent = null;
+        DateTimeManager.clearDateTimeValues();
+        
+        EventBus.emit('modal:closed');
+    };
+    
+    const getCurrentEvent = () => currentEvent;
+    
+    const validateForm = () => {
+        const title = document.getElementById('eventTitle').value.trim();
+        const { start } = DateTimeManager.getDateTimeValues();
+        
+        if (!title) {
+            UIManager.showNotification('Please enter an event title', 'error');
             return false;
         }
-        return event.extendedProps.userName === this.currentUser;
-    }
-    
-    // NEW: Visual feedback on mouse enter
-    handleEventMouseEnter(info) {
-        const canEdit = this.validateEventEdit(info.event);
-        if (canEdit) {
-            info.el.style.cursor = 'move';
-            info.el.style.opacity = '0.8';
-        } else {
-            info.el.style.cursor = 'not-allowed';
-        }
-    }
-    
-    // NEW: Reset visual feedback on mouse leave
-    handleEventMouseLeave(info) {
-        info.el.style.cursor = '';
-        info.el.style.opacity = '';
-    }
-    
-    // NEW: Visual feedback when drag starts
-    handleEventDragStart(info) {
-        console.log('Drag started for event:', info.event.title);
-        info.el.style.opacity = '0.5';
-        this.showDragFeedback('Moving event...');
-    }
-    
-    // NEW: Reset visual feedback when drag stops
-    handleEventDragStop(info) {
-        console.log('Drag stopped for event:', info.event.title);
-        info.el.style.opacity = '';
-        this.hideDragFeedback();
-    }
-    
-    // NEW: Visual feedback when resize starts
-    handleEventResizeStart(info) {
-        console.log('Resize started for event:', info.event.title);
-        info.el.style.opacity = '0.5';
-        this.showDragFeedback('Resizing event...');
-    }
-    
-    // NEW: Reset visual feedback when resize stops
-    handleEventResizeStop(info) {
-        console.log('Resize stopped for event:', info.event.title);
-        info.el.style.opacity = '';
-        this.hideDragFeedback();
-    }
-    
-    // NEW: Show drag feedback message
-    showDragFeedback(message) {
-        const statusEl = document.getElementById('connectionStatus');
-        statusEl.textContent = message;
-        statusEl.className = 'status';
-        statusEl.style.backgroundColor = '#f39c12';
-        statusEl.style.color = 'white';
-    }
-    
-    // NEW: Hide drag feedback message
-    hideDragFeedback() {
-        // Restore connection status
-        setTimeout(() => {
-            this.updateConnectionStatus('Connected', 'connected');
-        }, 1000);
-    }
-    
-    handleDateSelect(info) {
-        if (!this.currentUser) {
-            alert('Please enter your name first!');
-            return;
+        
+        if (!start) {
+            UIManager.showNotification('Please select a start date and time', 'error');
+            return false;
         }
         
-        this.openEventModal({
-            start: info.startStr,
-            end: info.endStr
+        const currentUser = UserManager.getCurrentUser();
+        if (!currentUser) {
+            UIManager.showNotification('Please enter your name first!', 'error');
+            return false;
+        }
+        
+        return true;
+    };
+    
+    const getFormData = () => {
+        const title = document.getElementById('eventTitle').value.trim();
+        const { start, end } = DateTimeManager.getDateTimeValues();
+        const currentUser = UserManager.getCurrentUser();
+        
+        return {
+            title,
+            start: Utils.formatDateTimeForAPI(start),
+            end: Utils.formatDateTimeForAPI(end || start),
+            userName: currentUser.name
+        };
+    };
+    
+    const setupEventListeners = () => {
+        const modal = document.getElementById('eventModal');
+        const closeBtn = modal?.querySelector('.close');
+        const cancelBtn = document.getElementById('cancelBtn');
+        const eventForm = document.getElementById('eventForm');
+        const deleteBtn = document.getElementById('deleteEventBtn');
+        
+        // Close modal events
+        [closeBtn, cancelBtn].forEach(btn => {
+            btn?.addEventListener('click', closeModal);
         });
         
-        this.calendar.unselect();
-    }
-    
-    handleEventClick(info) {
-        const event = info.event;
-        const canEdit = this.validateEventEdit(event);
+        // Close on outside click
+        modal?.addEventListener('click', (e) => {
+            if (e.target === modal) closeModal();
+        });
         
-        if (!canEdit) {
-            alert(`This event belongs to ${event.extendedProps.userName}. You can only edit your own events.`);
+        // Form submission
+        eventForm?.addEventListener('submit', (e) => {
+            e.preventDefault();
+            if (validateForm()) {
+                EventBus.emit('event:save', {
+                    eventData: getFormData(),
+                    isEdit: !!currentEvent,
+                    eventId: currentEvent?.id
+                });
+            }
+        });
+        
+        // Delete event
+        deleteBtn?.addEventListener('click', () => {
+            if (currentEvent && confirm('Are you sure you want to delete this event?')) {
+                EventBus.emit('event:delete', { eventId: currentEvent.id });
+            }
+        });
+    };
+    
+    // Event listeners
+    EventBus.on('calendar:dateSelect', ({ start, end }) => {
+        const currentUser = UserManager.getCurrentUser();
+        if (!currentUser) {
+            UIManager.showNotification('Please enter your name first!', 'error');
             return;
         }
         
-        this.openEventModal({
+        openModal({ start, end });
+    });
+    
+    EventBus.on('calendar:eventClick', ({ event }) => {
+        const canEdit = UserManager.canUserEditEvent(event);
+        if (!canEdit) {
+            UIManager.showNotification(
+                `This event belongs to ${event.extendedProps.userName}. You can only edit your own events.`,
+                'error'
+            );
+            return;
+        }
+        
+        openModal({
             id: event.id,
             title: event.title,
             start: event.startStr,
             end: event.endStr || event.startStr
         });
-    }
+    });
     
-    async handleEventMove(info) {
-        const event = info.event;
-        
-        console.log('Event move detected:', {
-            eventId: event.id,
-            eventTitle: event.title,
-            newStart: event.startStr,
-            newEnd: event.endStr,
-            userName: event.extendedProps.userName,
-            currentUser: this.currentUser
-        });
-        
-        if (!this.validateEventEdit(event)) {
-            console.log('Move reverted: user cannot edit this event');
-            info.revert();
-            alert('You can only move your own events!');
-            return;
-        }
-        
-        // FIXED: Debounce the update to prevent excessive API calls
-        this.debounceEventProcessing(async () => {
-            try {
-                await this.updateEvent({
-                    id: event.id,
-                    title: event.title,
-                    start: event.startStr,
-                    end: event.endStr || event.startStr
-                });
-                console.log('Event move saved successfully');
-            } catch (error) {
-                console.error('Error saving moved event:', error);
-                info.revert();
-                alert('Error saving event move. Changes reverted.');
-            }
-        });
-    }
+    EventBus.on('event:saved', closeModal);
+    EventBus.on('event:deleted', closeModal);
     
-    async handleEventResize(info) {
-        const event = info.event;
-        
-        console.log('Event resize detected:', {
-            eventId: event.id,
-            eventTitle: event.title,
-            newStart: event.startStr,
-            newEnd: event.endStr,
-            userName: event.extendedProps.userName,
-            currentUser: this.currentUser
-        });
-        
-        if (!this.validateEventEdit(event)) {
-            console.log('Resize reverted: user cannot edit this event');
-            info.revert();
-            alert('You can only resize your own events!');
-            return;
-        }
-        
-        // FIXED: Debounce the update to prevent excessive API calls
-        this.debounceEventProcessing(async () => {
-            try {
-                await this.updateEvent({
-                    id: event.id,
-                    title: event.title,
-                    start: event.startStr,
-                    end: event.endStr || event.startStr
-                });
-                console.log('Event resize saved successfully');
-            } catch (error) {
-                console.error('Error saving resized event:', error);
-                info.revert();
-                alert('Error saving event resize. Changes reverted.');
-            }
-        });
-    }
+    return {
+        openModal,
+        closeModal,
+        getCurrentEvent,
+        setupEventListeners
+    };
+})();
+
+// =============================================================================
+// EVENT MANAGER
+// =============================================================================
+
+/**
+ * Manages calendar event CRUD operations
+ */
+const EventManager = (() => {
+    const processedEventIds = new Set();
     
-    openEventModal(eventData = {}) {
-        const modal = document.getElementById('eventModal');
-        const modalTitle = document.getElementById('modalTitle');
-        const deleteBtn = document.getElementById('deleteEventBtn');
-        
-        // Set form values
-        document.getElementById('eventTitle').value = eventData.title || '';
-        
-        // Set datetime picker values
-        if (eventData.start) {
-            const startDate = this.parseEventDateTime(eventData.start);
-            $('#eventStart').datetimepicker('setOptions', { value: startDate });
-        } else {
-            // Default to current time rounded to next 15-minute interval
-            const now = new Date();
-            const roundedMinutes = Math.ceil(now.getMinutes() / 15) * 15;
-            now.setMinutes(roundedMinutes, 0, 0);
-            $('#eventStart').datetimepicker('setOptions', { value: now });
-        }
-        
-        if (eventData.end) {
-            const endDate = this.parseEventDateTime(eventData.end);
-            $('#eventEnd').datetimepicker('setOptions', { value: endDate });
-        } else if (eventData.start) {
-            // Set end to 1 hour after start
-            const startDate = this.parseEventDateTime(eventData.start);
-            const endDate = new Date(startDate.getTime() + 60 * 60 * 1000);
-            $('#eventEnd').datetimepicker('setOptions', { value: endDate });
-        } else {
-            // Default to 1 hour from now rounded to next 15-minute interval
-            const now = new Date();
-            const roundedMinutes = Math.ceil(now.getMinutes() / 15) * 15;
-            now.setMinutes(roundedMinutes, 0, 0);
-            const endTime = new Date(now.getTime() + 60 * 60 * 1000);
-            $('#eventEnd').datetimepicker('setOptions', { value: endTime });
-        }
-        
-        // Update modal title and show/hide delete button
-        if (eventData.id) {
-            modalTitle.textContent = 'Edit Event';
-            deleteBtn.style.display = 'inline-block';
-            this.currentEvent = eventData;
-        } else {
-            modalTitle.textContent = 'Add Event';
-            deleteBtn.style.display = 'none';
-            this.currentEvent = null;
-        }
-        
-        modal.style.display = 'block';
-        document.getElementById('eventTitle').focus();
-    }
-    
-    closeEventModal() {
-        document.getElementById('eventModal').style.display = 'none';
-        this.currentEvent = null;
-        
-        // Clear datetime picker values
-        $('#eventStart').val('');
-        $('#eventEnd').val('');
-    }
-    
-    async saveEvent() {
-        if (!this.currentUser) {
-            alert('Please enter your name first!');
-            return;
-        }
-        
-        const title = document.getElementById('eventTitle').value.trim();
-        const startValue = $('#eventStart').val();
-        const endValue = $('#eventEnd').val();
-        
-        if (!title || !startValue) {
-            alert('Please fill in all required fields!');
-            return;
-        }
-        
-        // Convert datetime picker values to ISO format
-        const start = this.formatDateTimeForAPI(startValue);
-        const end = endValue ? this.formatDateTimeForAPI(endValue) : start;
-        
-        const eventData = {
-            title,
-            start,
-            end,
-            userName: this.currentUser
-        };
-        
+    const saveEvent = async (eventData, isEdit = false, eventId = null) => {
         try {
-            if (this.currentEvent) {
-                // Update existing event
-                eventData.id = this.currentEvent.id;
-                await this.updateEvent(eventData);
+            let result;
+            
+            if (isEdit && eventId) {
+                result = await APIClient.updateEvent({ ...eventData, id: eventId });
             } else {
-                // Create new event
-                await this.createEvent(eventData);
+                result = await APIClient.createEvent(eventData);
             }
             
-            this.closeEventModal();
+            EventBus.emit('event:saved', { event: result, isEdit });
+            return result;
+            
         } catch (error) {
             console.error('Error saving event:', error);
-            alert('Error saving event. Please try again.');
+            EventBus.emit('event:saveError', { error });
+            throw error;
         }
-    }
+    };
     
-    async createEvent(eventData) {
-        console.log('Creating event:', eventData);
-        
-        const response = await fetch(this.apiEndpoints.api, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(eventData)
-        });
-        
-        if (!response.ok) {
-            const errorData = await response.json().catch(() => ({}));
-            throw new Error(errorData.error || 'Failed to create event');
+    const deleteEvent = async (eventId) => {
+        try {
+            await APIClient.deleteEvent(eventId);
+            EventBus.emit('event:deleted', { eventId });
+            
+        } catch (error) {
+            console.error('Error deleting event:', error);
+            EventBus.emit('event:deleteError', { error });
+            throw error;
         }
-        
-        const result = await response.json();
-        console.log('Event created successfully:', result);
-        return result;
-    }
+    };
     
-    async updateEvent(eventData) {
-        console.log('Updating event:', eventData);
+    const loadEvents = async () => {
+        const selectedUserIds = UserManager.getSelectedUserIds();
         
-        const response = await fetch(this.apiEndpoints.api, {
-            method: 'PUT',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(eventData)
-        });
-        
-        if (!response.ok) {
-            const errorData = await response.json().catch(() => ({}));
-            throw new Error(errorData.error || 'Failed to update event');
-        }
-        
-        const result = await response.json();
-        console.log('Event updated successfully:', result);
-        return result;
-    }
-    
-    async deleteEvent() {
-        if (!this.currentEvent || !confirm('Are you sure you want to delete this event?')) {
+        if (selectedUserIds.length === 0) {
+            EventBus.emit('events:loaded', { events: [] });
             return;
         }
         
         try {
-            console.log('Deleting event:', this.currentEvent.id);
+            const events = await APIClient.getEvents(selectedUserIds);
+            EventBus.emit('events:loaded', { events });
             
-            const response = await fetch(`${this.apiEndpoints.api}?id=${this.currentEvent.id}`, {
-                method: 'DELETE'
-            });
-            
-            if (!response.ok) {
-                const errorData = await response.json().catch(() => ({}));
-                throw new Error(errorData.error || 'Failed to delete event');
-            }
-            
-            console.log('Event deleted successfully');
-            this.closeEventModal();
         } catch (error) {
-            console.error('Error deleting event:', error);
-            alert('Error deleting event. Please try again.');
+            console.error('Error loading events:', error);
+            EventBus.emit('events:loadError', { error });
         }
-    }
+    };
     
-    addEventToCalendar(eventData) {
-        // Only add if this user's calendar is selected
-        if (this.selectedUsers.has(eventData.extendedProps.userId.toString())) {
-            console.log('Adding event to calendar:', eventData);
-            this.calendar.addEvent(eventData);
+    const handleEventMove = Utils.debounce(async (eventData) => {
+        try {
+            await APIClient.updateEvent(eventData);
+            console.log('Event move saved successfully');
+        } catch (error) {
+            console.error('Error saving moved event:', error);
+            EventBus.emit('event:moveError', { error });
         }
-    }
+    }, 100);
     
-    updateEventInCalendar(eventData) {
-        console.log('Updating event in calendar:', eventData);
-        const event = this.calendar.getEventById(eventData.id);
+    const handleEventResize = Utils.debounce(async (eventData) => {
+        try {
+            await APIClient.updateEvent(eventData);
+            console.log('Event resize saved successfully');
+        } catch (error) {
+            console.error('Error saving resized event:', error);
+            EventBus.emit('event:resizeError', { error });
+        }
+    }, 100);
+    
+    const preventDuplicateProcessing = (eventId, operation) => {
+        const key = `${operation}-${eventId}`;
+        
+        if (processedEventIds.has(key)) {
+            return true; // Is duplicate
+        }
+        
+        processedEventIds.add(key);
+        
+        // Clean up after 5 minutes
+        setTimeout(() => processedEventIds.delete(key), 300000);
+        
+        return false; // Not duplicate
+    };
+    
+    // Event listeners
+    EventBus.on('event:save', async ({ eventData, isEdit, eventId }) => {
+        try {
+            await saveEvent(eventData, isEdit, eventId);
+        } catch (error) {
+            UIManager.showNotification(`Error saving event: ${error.message}`, 'error');
+        }
+    });
+    
+    EventBus.on('event:delete', async ({ eventId }) => {
+        try {
+            await deleteEvent(eventId);
+        } catch (error) {
+            UIManager.showNotification(`Error deleting event: ${error.message}`, 'error');
+        }
+    });
+    
+    EventBus.on('users:selectionChanged', loadEvents);
+    EventBus.on('user:set', loadEvents);
+    
+    EventBus.on('calendar:eventDrop', ({ event, revert }) => {
+        const canEdit = UserManager.canUserEditEvent(event);
+        if (!canEdit) {
+            revert();
+            UIManager.showNotification('You can only move your own events!', 'error');
+            return;
+        }
+        
+        const eventData = {
+            id: event.id,
+            title: event.title,
+            start: event.startStr,
+            end: event.endStr || event.startStr
+        };
+        
+        handleEventMove(eventData);
+    });
+    
+    EventBus.on('calendar:eventResize', ({ event, revert }) => {
+        const canEdit = UserManager.canUserEditEvent(event);
+        if (!canEdit) {
+            revert();
+            UIManager.showNotification('You can only resize your own events!', 'error');
+            return;
+        }
+        
+        const eventData = {
+            id: event.id,
+            title: event.title,
+            start: event.startStr,
+            end: event.endStr || event.startStr
+        };
+        
+        handleEventResize(eventData);
+    });
+    
+    return {
+        loadEvents,
+        preventDuplicateProcessing
+    };
+})();
+
+// =============================================================================
+// CALENDAR MANAGER
+// =============================================================================
+
+/**
+ * Manages FullCalendar initialization and interactions
+ */
+const CalendarManager = (() => {
+    let calendar = null;
+    
+    const initializeCalendar = () => {
+        const calendarEl = document.getElementById('calendar');
+        if (!calendarEl) return;
+        
+        calendar = new FullCalendar.Calendar(calendarEl, {
+            initialView: Config.calendar.defaultView,
+            headerToolbar: {
+                left: 'prev,next today',
+                center: 'title',
+                right: 'dayGridMonth,timeGridWeek,timeGridDay,listWeek'
+            },
+            
+            // Enable editing
+            editable: true,
+            selectable: true,
+            selectMirror: true,
+            snapDuration: Config.calendar.snapDuration,
+            eventStartEditable: true,
+            eventDurationEditable: true,
+            eventResizableFromStart: true,
+            
+            // Visual settings
+            dayMaxEvents: true,
+            weekends: true,
+            height: 'auto',
+            
+            events: [],
+            
+            // Event handlers
+            select: (info) => {
+                EventBus.emit('calendar:dateSelect', {
+                    start: info.startStr,
+                    end: info.endStr
+                });
+                calendar.unselect();
+            },
+            
+            eventClick: (info) => {
+                EventBus.emit('calendar:eventClick', { event: info.event });
+            },
+            
+            eventDrop: (info) => {
+                EventBus.emit('calendar:eventDrop', {
+                    event: info.event,
+                    revert: info.revert
+                });
+            },
+            
+            eventResize: (info) => {
+                EventBus.emit('calendar:eventResize', {
+                    event: info.event,
+                    revert: info.revert
+                });
+            },
+            
+            eventAllow: (dropInfo, draggedEvent) => {
+                return UserManager.canUserEditEvent(draggedEvent);
+            },
+            
+            eventMouseEnter: (info) => {
+                const canEdit = UserManager.canUserEditEvent(info.event);
+                info.el.style.cursor = canEdit ? 'move' : 'not-allowed';
+                if (canEdit) info.el.style.opacity = '0.8';
+            },
+            
+            eventMouseLeave: (info) => {
+                info.el.style.cursor = '';
+                info.el.style.opacity = '';
+            },
+            
+            eventDragStart: (info) => {
+                info.el.style.opacity = '0.5';
+                EventBus.emit('drag:start', { message: 'Moving event...' });
+            },
+            
+            eventDragStop: (info) => {
+                info.el.style.opacity = '';
+                EventBus.emit('drag:stop');
+            },
+            
+            eventResizeStart: (info) => {
+                info.el.style.opacity = '0.5';
+                EventBus.emit('drag:start', { message: 'Resizing event...' });
+            },
+            
+            eventResizeStop: (info) => {
+                info.el.style.opacity = '';
+                EventBus.emit('drag:stop');
+            }
+        });
+        
+        calendar.render();
+    };
+    
+    const addEvent = (eventData) => {
+        const selectedUserIds = UserManager.getSelectedUserIds();
+        if (selectedUserIds.includes(eventData.extendedProps.userId.toString())) {
+            calendar?.addEvent(eventData);
+        }
+    };
+    
+    const updateEvent = (eventData) => {
+        const event = calendar?.getEventById(eventData.id);
         if (event) {
             event.setProp('title', eventData.title);
             event.setStart(eventData.start);
             event.setEnd(eventData.end);
         }
-    }
+    };
     
-    removeEventFromCalendar(eventId) {
-        console.log('Removing event from calendar:', eventId);
-        const event = this.calendar.getEventById(eventId);
-        if (event) {
-            event.remove();
-        }
-    }
+    const removeEvent = (eventId) => {
+        const event = calendar?.getEventById(eventId);
+        event?.remove();
+    };
     
-    updateConnectionStatus(message, className = '') {
-        const statusEl = document.getElementById('connectionStatus');
-        statusEl.textContent = message;
-        statusEl.className = `status ${className}`;
-        statusEl.style.backgroundColor = '';
-        statusEl.style.color = '';
-    }
+    const clearAllEvents = () => {
+        calendar?.removeAllEvents();
+    };
     
-    updateUserStatus(message, className = '') {
-        const statusEl = document.getElementById('userStatus');
-        statusEl.textContent = message;
-        statusEl.className = `status ${className}`;
-    }
+    const loadEvents = (events) => {
+        clearAllEvents();
+        events.forEach(event => calendar?.addEvent(event));
+    };
     
-    // Helper method to parse event datetime strings
-    parseEventDateTime(dateTimeStr) {
-        if (!dateTimeStr) return new Date();
-        
-        // Handle various datetime formats from FullCalendar
-        let date;
-        if (dateTimeStr.includes('T')) {
-            // ISO format: 2025-06-08T14:30:00
-            date = new Date(dateTimeStr);
-        } else if (dateTimeStr.includes(' ')) {
-            // SQL format: 2025-06-08 14:30:00
-            date = new Date(dateTimeStr.replace(' ', 'T'));
-        } else {
-            // Date only: 2025-06-08
-            date = new Date(dateTimeStr + 'T09:00:00');
-        }
-        
-        return isNaN(date.getTime()) ? new Date() : date;
-    }
+    // Event listeners
+    EventBus.on('events:loaded', ({ events }) => {
+        loadEvents(events);
+    });
     
-    // Helper method to format datetime for API (MySQL format)
-    formatDateTimeForAPI(dateTimeStr) {
-        if (!dateTimeStr) return '';
-        
-        // xdsoft datetimepicker returns format: YYYY-MM-DD HH:MM
-        // Convert to MySQL datetime format: YYYY-MM-DD HH:MM:SS
-        const parts = dateTimeStr.split(' ');
-        if (parts.length === 2) {
-            return `${parts[0]} ${parts[1]}:00`;
-        }
-        
-        // Fallback: try to parse as date and format
-        const date = new Date(dateTimeStr);
-        if (isNaN(date.getTime())) return '';
-        
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const day = String(date.getDate()).padStart(2, '0');
-        const hours = String(date.getHours()).padStart(2, '0');
-        const minutes = String(date.getMinutes()).padStart(2, '0');
-        const seconds = String(date.getSeconds()).padStart(2, '0');
-        
-        return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
-    }
-}
+    EventBus.on('sse:eventCreate', ({ eventData }) => {
+        addEvent(eventData);
+    });
+    
+    EventBus.on('sse:eventUpdate', ({ eventData }) => {
+        updateEvent(eventData);
+    });
+    
+    EventBus.on('sse:eventDelete', ({ eventId }) => {
+        removeEvent(eventId);
+    });
+    
+    return {
+        initializeCalendar,
+        addEvent,
+        updateEvent,
+        removeEvent,
+        clearAllEvents,
+        loadEvents
+    };
+})();
 
-// Initialize the calendar when DOM is loaded
+// =============================================================================
+// SSE MANAGER
+// =============================================================================
+
+/**
+ * Manages Server-Sent Events for real-time updates
+ */
+const SSEManager = (() => {
+    let eventSource = null;
+    let lastEventId = 0;
+    let reconnectAttempts = 0;
+    let isConnected = false;
+    
+    const connect = () => {
+        if (eventSource) {
+            eventSource.close();
+            isConnected = false;
+        }
+        
+        EventBus.emit('connection:status', {
+            status: 'connecting',
+            message: 'Connecting...'
+        });
+        
+        console.log('Attempting SSE connection with lastEventId:', lastEventId);
+        
+        eventSource = new EventSource(`${Config.apiEndpoints.sse}?lastEventId=${lastEventId}`);
+        
+        eventSource.onopen = () => {
+            EventBus.emit('connection:status', {
+                status: 'connected',
+                message: 'Connected'
+            });
+            isConnected = true;
+            reconnectAttempts = 0;
+            console.log('SSE connection established');
+        };
+        
+        eventSource.onerror = (e) => {
+            console.log('SSE connection error:', e);
+            EventBus.emit('connection:status', {
+                status: 'disconnected',
+                message: 'Disconnected'
+            });
+            isConnected = false;
+            eventSource.close();
+            
+            // Exponential backoff for reconnection
+            reconnectAttempts++;
+            if (reconnectAttempts <= Config.sse.maxReconnectAttempts) {
+                const delay = Math.min(
+                    Config.sse.baseReconnectDelay * Math.pow(2, reconnectAttempts),
+                    Config.sse.maxReconnectDelay
+                );
+                
+                console.log(`SSE reconnecting in ${delay}ms (attempt ${reconnectAttempts})`);
+                setTimeout(connect, delay);
+            } else {
+                console.log('Max reconnection attempts reached');
+                EventBus.emit('connection:status', {
+                    status: 'failed',
+                    message: 'Connection failed'
+                });
+            }
+        };
+        
+        setupEventListeners();
+    };
+    
+    const setupEventListeners = () => {
+        const handleSSEEvent = (eventType, handler) => {
+            eventSource.addEventListener(eventType, (e) => {
+                try {
+                    const eventData = JSON.parse(e.data);
+                    const eventId = `${eventType}-${eventData.id || Date.now()}`;
+                    
+                    if (!EventManager.preventDuplicateProcessing(eventId, eventType)) {
+                        handler(eventData);
+                        lastEventId = parseInt(e.lastEventId) || lastEventId;
+                    }
+                } catch (error) {
+                    console.error(`Error handling SSE ${eventType} event:`, error);
+                }
+            });
+        };
+        
+        handleSSEEvent('create', (eventData) => {
+            console.log('SSE: Creating event', eventData.id);
+            EventBus.emit('sse:eventCreate', { eventData });
+        });
+        
+        handleSSEEvent('update', (eventData) => {
+            console.log('SSE: Updating event', eventData.id);
+            EventBus.emit('sse:eventUpdate', { eventData });
+        });
+        
+        handleSSEEvent('delete', (eventData) => {
+            console.log('SSE: Deleting event', eventData.id);
+            EventBus.emit('sse:eventDelete', { eventId: eventData.id });
+        });
+        
+        eventSource.addEventListener('user_created', (e) => {
+            console.log('SSE: User created, refreshing users list');
+            EventBus.emit('users:refresh');
+            lastEventId = parseInt(e.lastEventId) || lastEventId;
+        });
+        
+        eventSource.addEventListener('heartbeat', (e) => {
+            lastEventId = parseInt(e.lastEventId) || lastEventId;
+        });
+        
+        eventSource.addEventListener('reconnect', (e) => {
+            console.log('SSE: Server requested reconnect');
+            lastEventId = parseInt(e.lastEventId) || lastEventId;
+            connect();
+        });
+        
+        eventSource.addEventListener('timeout', () => {
+            console.log('SSE: Connection timeout, reconnecting');
+            connect();
+        });
+    };
+    
+    const disconnect = () => {
+        if (eventSource) {
+            eventSource.close();
+            eventSource = null;
+            isConnected = false;
+        }
+    };
+    
+    const getConnectionStatus = () => ({
+        isConnected,
+        reconnectAttempts,
+        lastEventId
+    });
+    
+    // Event listeners
+    EventBus.on('users:refresh', () => {
+        UserManager.loadUsers();
+    });
+    
+    return {
+        connect,
+        disconnect,
+        getConnectionStatus
+    };
+})();
+
+// =============================================================================
+// APPLICATION CONTROLLER
+// =============================================================================
+
+/**
+ * Main application controller that coordinates all components
+ */
+const CollaborativeCalendarApp = (() => {
+    const setupUIEventListeners = () => {
+        // User name input
+        const userNameInput = document.getElementById('userName');
+        if (userNameInput) {
+            const handleUserNameChange = (e) => {
+                UserManager.setCurrentUser(e.target.value.trim());
+            };
+            
+            userNameInput.addEventListener('change', handleUserNameChange);
+            userNameInput.addEventListener('blur', handleUserNameChange);
+            userNameInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    handleUserNameChange(e);
+                }
+            });
+        }
+        
+        // Add event button
+        const addEventBtn = document.getElementById('addEventBtn');
+        addEventBtn?.addEventListener('click', () => {
+            EventBus.emit('calendar:dateSelect', {});
+        });
+        
+        // Refresh users button
+        const refreshUsersBtn = document.getElementById('refreshUsers');
+        refreshUsersBtn?.addEventListener('click', () => {
+            UserManager.loadUsers();
+        });
+    };
+    
+    const init = () => {
+        console.log('Initializing Collaborative Calendar with modular architecture...');
+        
+        // Initialize components in order
+        DateTimeManager.initializeDateTimePickers();
+        CalendarManager.initializeCalendar();
+        ModalManager.setupEventListeners();
+        setupUIEventListeners();
+        
+        // Start SSE connection
+        SSEManager.connect();
+        
+        // Emit app initialization event
+        EventBus.emit('app:init');
+        
+        console.log('Collaborative Calendar initialized successfully');
+    };
+    
+    const destroy = () => {
+        SSEManager.disconnect();
+        console.log('Collaborative Calendar destroyed');
+    };
+    
+    return {
+        init,
+        destroy
+    };
+})();
+
+// =============================================================================
+// APPLICATION INITIALIZATION
+// =============================================================================
+
 document.addEventListener('DOMContentLoaded', () => {
-    console.log('Initializing Collaborative Calendar with fixes for duplicate events...');
-    new CollaborativeCalendar();
+    CollaborativeCalendarApp.init();
+});
+
+// Cleanup on page unload
+window.addEventListener('beforeunload', () => {
+    CollaborativeCalendarApp.destroy();
 });
