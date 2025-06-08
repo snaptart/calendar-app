@@ -1,9 +1,9 @@
 <?php
 /**
- * Complete Updated API Controller with Import Functionality and Fixed Error Handling
+ * Complete Enhanced API Controller with Events Management
  * Location: backend/api.php
  * 
- * This replaces your existing api.php file with full import support and proper error handling
+ * This replaces your existing api.php file with full events management support
  */
 
 // Set proper error handling to prevent HTML output
@@ -292,16 +292,14 @@ function handleGetRequest($auth, $userModel, $eventModel, $calendarUpdate, $even
             sendResponse($stats);
             break;
             
-        case 'user_stats':
-            $currentUser = $auth->requireAuth();
+        case 'user_activity':
+            $auth->requireAuth();
             
-            $userId = $_GET['user_id'] ?? $currentUser['id'];
-            if ($userId != $currentUser['id']) {
-                throw new Exception('You can only view your own statistics');
-            }
+            $days = (int)($_GET['days'] ?? 30);
+            $days = max(1, min($days, 365));
             
-            $stats = $userModel->getUserStats($userId);
-            sendResponse($stats);
+            $activity = $userModel->getUserActivity($days);
+            sendResponse($activity);
             break;
             
         case 'calendar_updates':
@@ -343,12 +341,19 @@ function handleGetRequest($auth, $userModel, $eventModel, $calendarUpdate, $even
                     'json' => [
                         'name' => 'JSON',
                         'extensions' => ['.json'],
-                        'description' => 'JavaScript Object Notation format'
+                        'description' => 'JavaScript Object Notation format',
+                        'sample' => [
+                            'title' => 'Sample Event',
+                            'start' => '2025-06-15 10:00:00',
+                            'end' => '2025-06-15 11:00:00',
+                            'user_name' => 'John Doe'
+                        ]
                     ],
                     'csv' => [
                         'name' => 'CSV',
                         'extensions' => ['.csv', '.txt'],
-                        'description' => 'Comma-separated values format'
+                        'description' => 'Comma-separated values format',
+                        'sample_headers' => 'title,start,end,user_name,description'
                     ],
                     'ics' => [
                         'name' => 'ICS/iCal',
@@ -359,8 +364,26 @@ function handleGetRequest($auth, $userModel, $eventModel, $calendarUpdate, $even
                 'limits' => [
                     'max_file_size' => '5MB',
                     'max_events' => 20
+                ],
+                'requirements' => [
+                    'title' => 'Required - Event title',
+                    'start' => 'Required - Start date/time (future dates only)',
+                    'end' => 'Optional - End date/time (defaults to start time)',
+                    'user_name' => 'Required - Must match existing user name',
+                    'description' => 'Optional - Event description'
                 ]
             ]);
+            break;
+            
+        case 'database_stats':
+            $auth->requireAuth();
+            
+            try {
+                $stats = getDatabaseStats();
+                sendResponse($stats);
+            } catch (Exception $e) {
+                sendResponse(['error' => 'Unable to fetch database statistics']);
+            }
             break;
             
         case 'test':
@@ -369,7 +392,8 @@ function handleGetRequest($auth, $userModel, $eventModel, $calendarUpdate, $even
                 'status' => 'success',
                 'message' => 'API is working',
                 'timestamp' => time(),
-                'authenticated' => $isAuthenticated
+                'authenticated' => $isAuthenticated,
+                'version' => '2.0'
             ]);
             break;
             
@@ -531,6 +555,26 @@ function handlePostRequest($auth, $userModel, $eventModel, $calendarUpdate, $eve
             );
             
             sendResponse(['success' => $success]);
+            break;
+            
+        case 'update_user_profile':
+            $currentUser = $auth->requireAuth();
+            
+            $allowedFields = ['name', 'email', 'color'];
+            $updateData = [];
+            
+            foreach ($allowedFields as $field) {
+                if (isset($input[$field])) {
+                    $updateData[$field] = $input[$field];
+                }
+            }
+            
+            if (empty($updateData)) {
+                throw new Exception('No valid fields to update');
+            }
+            
+            $updatedUser = $userModel->updateUser($currentUser['id'], $updateData);
+            sendResponse($updatedUser);
             break;
             
         default:

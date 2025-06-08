@@ -31,13 +31,16 @@
 					</h1>
 					<nav class="main-navigation">
 						<a href="./index.html" class="nav-link active">
-							Calendar
+							📅 Calendar
+						</a>
+						<a href="./events.html" class="nav-link">
+							📋 Events
 						</a>
 						<a href="./users.html" class="nav-link">
-							Users
+							👥 Users
 						</a>
 						<a href="./import.html" class="nav-link">
-							📥 Import Events
+							📥 Import
 						</a>
 					</nav>
 				</div>
@@ -58,13 +61,17 @@
                 <div id="userCheckboxes" class="checkbox-group">
                     <!-- User checkboxes will be populated here -->
                 </div>
-                <button id="refreshUsers" class="btn btn-small btn-outline">Refresh Users</button>
+                <button id="refreshUsers" class="btn btn-small btn-outline">🔄 Refresh Users</button>
             </div>
             
             <div class="calendar-actions">
                 <button id="addEventBtn" class="btn btn-primary">
                     <span class="btn-icon">+</span>
                     Add Event
+                </button>
+                <button id="viewEventsBtn" class="btn btn-outline">
+                    <span class="btn-icon">📋</span>
+                    View All Events
                 </button>
                 <button id="importEventsBtn" class="btn btn-outline">
                     <span class="btn-icon">📥</span>
@@ -121,14 +128,38 @@
     <script src="../js/script.js"></script>
     
     <script>
-        // Add import button functionality
+        // Add navigation functionality
         document.addEventListener('DOMContentLoaded', () => {
+            // Import button functionality
             const importEventsBtn = document.getElementById('importEventsBtn');
             if (importEventsBtn) {
                 importEventsBtn.addEventListener('click', () => {
                     window.location.href = './import.html';
                 });
             }
+            
+            // View all events button functionality
+            const viewEventsBtn = document.getElementById('viewEventsBtn');
+            if (viewEventsBtn) {
+                viewEventsBtn.addEventListener('click', () => {
+                    window.location.href = './events.html';
+                });
+            }
+            
+            // Update active navigation
+            const currentPage = window.location.pathname.split('/').pop();
+            const navLinks = document.querySelectorAll('.nav-link');
+            
+            navLinks.forEach(link => {
+                link.classList.remove('active');
+                const linkPage = link.getAttribute('href').replace('./', '');
+                
+                if ((currentPage === 'index.html' || currentPage === '') && linkPage === 'index.html') {
+                    link.classList.add('active');
+                } else if (currentPage === linkPage) {
+                    link.classList.add('active');
+                }
+            });
         });
     </script>
 </body>
