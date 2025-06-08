@@ -24,11 +24,12 @@
     <div class="container">
         <header>
             <div class="header-content">
-                <h1>Collaborative Calendar</h1>
+                <h1>📅 Collaborative Calendar</h1>
                 <div class="user-section">
-                    <label for="userName">Your Name</label>
-                    <input type="text" id="userName" placeholder="Enter your name..." />
-                    <span id="userStatus" class="status"></span>
+                    <label for="userName">Logged in as</label>
+                    <input type="text" id="userName" placeholder="Authenticating..." disabled />
+                    <span id="userStatus" class="status">Checking authentication...</span>
+                    <!-- Logout button will be added dynamically -->
                 </div>
             </div>
         </header>
@@ -48,7 +49,7 @@
                     Add Event
                 </button>
                 <div class="connection-status">
-                    <span id="connectionStatus" class="status">Connecting...</span>
+                    <span id="connectionStatus" class="status">Initializing...</span>
                 </div>
             </div>
         </div>

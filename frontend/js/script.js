@@ -1,8 +1,7 @@
-// Modular Collaborative Calendar Application
+// Modular Collaborative Calendar Application with Authentication
 // Location: frontend/js/script.js
 // 
-// This refactored version separates concerns into distinct, reusable components
-// using functional programming patterns and an event-driven architecture.
+// Updated version with authentication integration
 
 // =============================================================================
 // CORE UTILITIES AND EVENT BUS
@@ -116,11 +115,11 @@ const Utils = {
 };
 
 // =============================================================================
-// API CLIENT
+// API CLIENT WITH AUTHENTICATION
 // =============================================================================
 
 /**
- * Centralized API communication
+ * Centralized API communication with authentication
  */
 const APIClient = (() => {
     const makeRequest = async (url, options = {}) => {
@@ -130,8 +129,15 @@ const APIClient = (() => {
                     'Content-Type': 'application/json',
                     ...options.headers
                 },
+                credentials: 'include', // Include cookies for session
                 ...options
             });
+            
+            if (response.status === 401) {
+                // Unauthorized - redirect to login
+                EventBus.emit('auth:unauthorized');
+                throw new Error('Authentication required');
+            }
             
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({}));
@@ -146,19 +152,14 @@ const APIClient = (() => {
     };
     
     return {
+        // Authentication operations
+        checkAuth() {
+            return makeRequest(`${Config.apiEndpoints.api}?action=check_auth`);
+        },
+        
         // User operations
         getUsers() {
             return makeRequest(`${Config.apiEndpoints.api}?action=users`);
-        },
-        
-        createUser(userName) {
-            return makeRequest(Config.apiEndpoints.api, {
-                method: 'POST',
-                body: JSON.stringify({
-                    action: 'create_user',
-                    userName
-                })
-            });
         },
         
         // Event operations
@@ -195,20 +196,75 @@ const APIClient = (() => {
 })();
 
 // =============================================================================
-// USER MANAGER
+// AUTHENTICATION GUARD
 // =============================================================================
 
 /**
- * Manages user operations and selection
+ * Handles authentication checks and redirects
+ */
+const AuthGuard = (() => {
+    let currentUser = null;
+    
+    const checkAuthentication = async () => {
+        try {
+            const response = await APIClient.checkAuth();
+            
+            if (response.authenticated) {
+                currentUser = response.user;
+                EventBus.emit('auth:authenticated', { user: response.user });
+                return true;
+            } else {
+                redirectToLogin();
+                return false;
+            }
+        } catch (error) {
+            console.error('Authentication check failed:', error);
+            redirectToLogin();
+            return false;
+        }
+    };
+    
+    const redirectToLogin = () => {
+        window.location.href = './login.html';
+    };
+    
+    const getCurrentUser = () => currentUser;
+    
+    const logout = async () => {
+        try {
+            await fetch(Config.apiEndpoints.api, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({ action: 'logout' })
+            });
+        } catch (error) {
+            console.error('Logout error:', error);
+        } finally {
+            redirectToLogin();
+        }
+    };
+    
+    // Event listeners
+    EventBus.on('auth:unauthorized', redirectToLogin);
+    
+    return {
+        checkAuthentication,
+        getCurrentUser,
+        logout
+    };
+})();
+
+// =============================================================================
+// USER MANAGER (Updated for Authentication)
+// =============================================================================
+
+/**
+ * Manages user operations and selection with authentication
  */
 const UserManager = (() => {
-    let currentUser = null;
     let allUsers = [];
     let selectedUserIds = new Set();
-    
-    const validateUserName = (userName) => {
-        return userName && userName.trim().length > 0;
-    };
     
     const renderUserCheckboxes = () => {
         const container = document.getElementById('userCheckboxes');
@@ -265,6 +321,13 @@ const UserManager = (() => {
         try {
             const users = await APIClient.getUsers();
             allUsers = users;
+            
+            // Auto-select current user's calendar
+            const currentUser = AuthGuard.getCurrentUser();
+            if (currentUser) {
+                selectedUserIds.add(currentUser.id.toString());
+            }
+            
             renderUserCheckboxes();
             
             EventBus.emit('users:loaded', { users });
@@ -274,44 +337,29 @@ const UserManager = (() => {
         }
     };
     
-    const setCurrentUser = async (userName) => {
-        if (!validateUserName(userName)) {
-            currentUser = null;
-            EventBus.emit('user:cleared');
-            return;
-        }
-        
-        try {
-            const userData = await APIClient.createUser(userName.trim());
-            currentUser = userData;
-            
-            // Auto-select current user's calendar
-            selectedUserIds.add(userData.id.toString());
-            
-            EventBus.emit('user:set', { user: userData });
-            
-            // Refresh users list and reload events
-            await loadUsers();
-            
-        } catch (error) {
-            console.error('Error setting current user:', error);
-            EventBus.emit('user:error', { error });
-        }
-    };
-    
-    const getCurrentUser = () => currentUser;
+    const getCurrentUser = () => AuthGuard.getCurrentUser();
     const getAllUsers = () => allUsers;
     const getSelectedUserIds = () => Array.from(selectedUserIds);
     
     const canUserEditEvent = (event) => {
-        return currentUser && event.extendedProps.userName === currentUser.name;
+        const currentUser = getCurrentUser();
+        return currentUser && event.extendedProps.userId === currentUser.id;
     };
     
     // Event listeners
     EventBus.on('app:init', loadUsers);
+    EventBus.on('auth:authenticated', ({ user }) => {
+        // Update user status display
+        const userNameInput = document.getElementById('userName');
+        if (userNameInput) {
+            userNameInput.value = user.name;
+            userNameInput.disabled = true; // User is now authenticated
+        }
+        
+        EventBus.emit('user:set', { user });
+    });
     
     return {
-        setCurrentUser,
         getCurrentUser,
         getAllUsers,
         getSelectedUserIds,
@@ -439,11 +487,11 @@ const DateTimeManager = (() => {
 })();
 
 // =============================================================================
-// UI MANAGER
+// UI MANAGER (Updated for Authentication)
 // =============================================================================
 
 /**
- * Manages UI updates and visual feedback
+ * Manages UI updates and visual feedback with authentication
  */
 const UIManager = (() => {
     const updateConnectionStatus = (message, className = '') => {
@@ -481,12 +529,45 @@ const UIManager = (() => {
     };
     
     const showNotification = (message, type = 'info') => {
-        // Simple notification system - could be enhanced
         console.log(`[${type.toUpperCase()}] ${message}`);
         
-        // You could implement a toast notification system here
         if (type === 'error') {
             alert(message);
+        }
+    };
+    
+    const setupAuthenticatedUI = (user) => {
+        // Update header to show authenticated user
+        const userNameInput = document.getElementById('userName');
+        if (userNameInput) {
+            userNameInput.value = user.name;
+            userNameInput.disabled = true;
+            userNameInput.style.backgroundColor = '#f7fafc';
+            userNameInput.style.color = '#2d3748';
+        }
+        
+        // Add logout button
+        addLogoutButton();
+        
+        updateUserStatus(`Logged in as: ${user.name}`, 'user-set');
+    };
+    
+    const addLogoutButton = () => {
+        const userSection = document.querySelector('.user-section');
+        if (userSection && !document.getElementById('logoutBtn')) {
+            const logoutBtn = document.createElement('button');
+            logoutBtn.id = 'logoutBtn';
+            logoutBtn.className = 'btn btn-small btn-outline';
+            logoutBtn.textContent = 'Logout';
+            logoutBtn.style.marginLeft = '8px';
+            
+            logoutBtn.addEventListener('click', () => {
+                if (confirm('Are you sure you want to logout?')) {
+                    AuthGuard.logout();
+                }
+            });
+            
+            userSection.appendChild(logoutBtn);
         }
     };
     
@@ -495,17 +576,17 @@ const UIManager = (() => {
         updateConnectionStatus(message, status);
     });
     
-    EventBus.on('user:set', ({ user }) => {
-        updateUserStatus(`Set as: ${user.name}`, 'user-set');
+    EventBus.on('auth:authenticated', ({ user }) => {
+        setupAuthenticatedUI(user);
     });
     
-    EventBus.on('user:cleared', () => {
-        updateUserStatus('');
+    EventBus.on('user:set', ({ user }) => {
+        updateUserStatus(`Logged in as: ${user.name}`, 'user-set');
     });
     
     EventBus.on('user:error', ({ error }) => {
-        updateUserStatus('Error setting user', 'disconnected');
-        showNotification(`Error setting user: ${error.message}`, 'error');
+        updateUserStatus('Authentication error', 'disconnected');
+        showNotification(`Authentication error: ${error.message}`, 'error');
     });
     
     EventBus.on('drag:start', ({ message }) => {
@@ -521,7 +602,8 @@ const UIManager = (() => {
         updateUserStatus,
         showDragFeedback,
         hideDragFeedback,
-        showNotification
+        showNotification,
+        setupAuthenticatedUI
     };
 })();
 
@@ -541,6 +623,13 @@ const ModalManager = (() => {
         const deleteBtn = document.getElementById('deleteEventBtn');
         
         if (!modal) return;
+        
+        // Check if user is authenticated
+        const currentUser = UserManager.getCurrentUser();
+        if (!currentUser) {
+            UIManager.showNotification('Please login to create events', 'error');
+            return;
+        }
         
         // Set form values
         document.getElementById('eventTitle').value = eventData.title || '';
@@ -599,7 +688,7 @@ const ModalManager = (() => {
         
         const currentUser = UserManager.getCurrentUser();
         if (!currentUser) {
-            UIManager.showNotification('Please enter your name first!', 'error');
+            UIManager.showNotification('Please login to create events', 'error');
             return false;
         }
         
@@ -609,13 +698,11 @@ const ModalManager = (() => {
     const getFormData = () => {
         const title = document.getElementById('eventTitle').value.trim();
         const { start, end } = DateTimeManager.getDateTimeValues();
-        const currentUser = UserManager.getCurrentUser();
         
         return {
             title,
             start: Utils.formatDateTimeForAPI(start),
-            end: Utils.formatDateTimeForAPI(end || start),
-            userName: currentUser.name
+            end: Utils.formatDateTimeForAPI(end || start)
         };
     };
     
@@ -660,7 +747,7 @@ const ModalManager = (() => {
     EventBus.on('calendar:dateSelect', ({ start, end }) => {
         const currentUser = UserManager.getCurrentUser();
         if (!currentUser) {
-            UIManager.showNotification('Please enter your name first!', 'error');
+            UIManager.showNotification('Please login to create events', 'error');
             return;
         }
         
@@ -701,7 +788,7 @@ const ModalManager = (() => {
 // =============================================================================
 
 /**
- * Manages calendar event CRUD operations
+ * Manages calendar event CRUD operations with authentication
  */
 const EventManager = (() => {
     const processedEventIds = new Set();
@@ -1164,33 +1251,25 @@ const SSEManager = (() => {
 })();
 
 // =============================================================================
-// APPLICATION CONTROLLER
+// APPLICATION CONTROLLER (Updated for Authentication)
 // =============================================================================
 
 /**
- * Main application controller that coordinates all components
+ * Main application controller that coordinates all components with authentication
  */
 const CollaborativeCalendarApp = (() => {
     const setupUIEventListeners = () => {
-        // User name input
-        const userNameInput = document.getElementById('userName');
-        if (userNameInput) {
-            const handleUserNameChange = (e) => {
-                UserManager.setCurrentUser(e.target.value.trim());
-            };
-            
-            userNameInput.addEventListener('change', handleUserNameChange);
-            userNameInput.addEventListener('blur', handleUserNameChange);
-            userNameInput.addEventListener('keypress', (e) => {
-                if (e.key === 'Enter') {
-                    handleUserNameChange(e);
-                }
-            });
-        }
+        // Remove user name input handler since it's now disabled
+        // User authentication is handled by the login system
         
         // Add event button
         const addEventBtn = document.getElementById('addEventBtn');
         addEventBtn?.addEventListener('click', () => {
+            const currentUser = UserManager.getCurrentUser();
+            if (!currentUser) {
+                UIManager.showNotification('Please login to create events', 'error');
+                return;
+            }
             EventBus.emit('calendar:dateSelect', {});
         });
         
@@ -1201,8 +1280,16 @@ const CollaborativeCalendarApp = (() => {
         });
     };
     
-    const init = () => {
-        console.log('Initializing Collaborative Calendar with modular architecture...');
+    const init = async () => {
+        console.log('Initializing Collaborative Calendar with authentication...');
+        
+        // Check authentication first
+        const isAuthenticated = await AuthGuard.checkAuthentication();
+        
+        if (!isAuthenticated) {
+            // User is not authenticated, AuthGuard will handle redirect
+            return;
+        }
         
         // Initialize components in order
         DateTimeManager.initializeDateTimePickers();
