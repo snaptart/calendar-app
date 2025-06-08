@@ -21,6 +21,7 @@ class CollaborativeCalendar {
         this.setupEventListeners();
         this.setupSSE();
         this.loadUsers();
+        this.setupTimePickerIncrements();
     }
     
     initializeCalendar() {
@@ -501,30 +502,57 @@ class CollaborativeCalendar {
         }
     }
     
-    openEventModal(eventData = {}) {
-        const modal = document.getElementById('eventModal');
-        const modalTitle = document.getElementById('modalTitle');
-        const deleteBtn = document.getElementById('deleteEventBtn');
-        
-        // Set form values
-        document.getElementById('eventTitle').value = eventData.title || '';
-        document.getElementById('eventStart').value = this.formatDateTimeLocal(eventData.start || new Date());
-        document.getElementById('eventEnd').value = this.formatDateTimeLocal(eventData.end || eventData.start || new Date());
-        
-        // Update modal title and show/hide delete button
-        if (eventData.id) {
-            modalTitle.textContent = 'Edit Event';
-            deleteBtn.style.display = 'inline-block';
-            this.currentEvent = eventData;
-        } else {
-            modalTitle.textContent = 'Add Event';
-            deleteBtn.style.display = 'none';
-            this.currentEvent = null;
-        }
-        
-        modal.style.display = 'block';
-        document.getElementById('eventTitle').focus();
-    }
+	openEventModal(eventData = {}) {
+		const modal = document.getElementById('eventModal');
+		const modalTitle = document.getElementById('modalTitle');
+		const deleteBtn = document.getElementById('deleteEventBtn');
+
+		// Round start and end times to 5-minute increments
+		let startTime = eventData.start || new Date();
+		let endTime = eventData.end || eventData.start || new Date();
+
+		if (typeof startTime === 'string') {
+			startTime = new Date(startTime);
+		}
+		if (typeof endTime === 'string') {
+			endTime = new Date(endTime);
+		}
+
+		// Round to nearest 5 minutes
+		const roundToFiveMinutes = (date) => {
+			const minutes = date.getMinutes();
+			const roundedMinutes = Math.round(minutes / 5) * 5;
+			date.setMinutes(roundedMinutes);
+			date.setSeconds(0);
+			date.setMilliseconds(0);
+			return date;
+		};
+
+		startTime = roundToFiveMinutes(new Date(startTime));
+		endTime = roundToFiveMinutes(new Date(endTime));
+
+		// Set form values with rounded times
+		document.getElementById('eventTitle').value = eventData.title || '';
+		document.getElementById('eventStart').value = this.formatDateTimeLocal(startTime);
+		document.getElementById('eventEnd').value = this.formatDateTimeLocal(endTime);
+
+		// Update modal title and show/hide delete button
+		if (eventData.id) {
+			modalTitle.textContent = 'Edit Event';
+			deleteBtn.style.display = 'inline-block';
+			this.currentEvent = eventData;
+		} else {
+			modalTitle.textContent = 'Add Event';
+			deleteBtn.style.display = 'none';
+			this.currentEvent = null;
+		}
+
+		modal.style.display = 'block';
+		document.getElementById('eventTitle').focus();
+
+		// Set up 5-minute increments after modal is shown
+		setTimeout(() => this.setupTimePickerIncrements(), 100);
+	}
     
     closeEventModal() {
         document.getElementById('eventModal').style.display = 'none';
@@ -692,6 +720,56 @@ class CollaborativeCalendar {
         
         return `${year}-${month}-${day}T${hours}:${minutes}`;
     }
+    
+    setupTimePickerIncrements() {
+		// Function to round time to nearest 5-minute increment
+		const roundToFiveMinutes = (date) => {
+			const minutes = date.getMinutes();
+			const roundedMinutes = Math.round(minutes / 5) * 5;
+			date.setMinutes(roundedMinutes);
+			date.setSeconds(0);
+			date.setMilliseconds(0);
+			return date;
+		};
+
+		// Function to set up 5-minute increments on datetime inputs
+		const setupInput = (inputId) => {
+			const input = document.getElementById(inputId);
+			if (!input)
+				return;
+
+			// Set step attribute to 5 minutes (300 seconds)
+			input.setAttribute('step', '300');
+
+			// Round current value to 5-minute increment when input loses focus
+			input.addEventListener('blur', () => {
+				if (input.value) {
+					const date = new Date(input.value);
+					if (!isNaN(date.getTime())) {
+						const roundedDate = roundToFiveMinutes(date);
+						input.value = this.formatDateTimeLocal(roundedDate);
+					}
+				}
+			});
+
+			// Also round when user changes the time manually
+			input.addEventListener('change', () => {
+				if (input.value) {
+					const date = new Date(input.value);
+					if (!isNaN(date.getTime())) {
+						const roundedDate = roundToFiveMinutes(date);
+						input.value = this.formatDateTimeLocal(roundedDate);
+					}
+				}
+			});
+		};
+
+		// Set up both start and end time inputs
+		setupInput('eventStart');
+		setupInput('eventEnd');
+	}
+    
+    
 }
 
 // Initialize the calendar when DOM is loaded
