@@ -1,0 +1,22 @@
+[
+  {
+    "title": "Team Meeting",
+    "start": "2025-06-15 10:00:00",
+    "end": "2025-06-15 11:00:00",
+    "user_name": "John Doe",
+    "description": "Weekly team sync meeting"
+  },
+  {
+    "title": "Project Review",
+    "start": "2025-06-16 14:00:00",
+    "end": "2025-06-16 15:30:00",
+    "user_name": "Jane Smith",
+    "description": "Quarterly project review session"
+  },
+  {
+    "title": "Client Call",
+    "start": "2025-06-17 09:00:00",
+    "end": "2025-06-17 10:00:00",
+    "user_name": "John Doe"
+  }
+]

@@ -1,10 +1,9 @@
 <?php
 /**
- * Refactored REST API Controller for Collaborative Calendar
+ * Complete Updated API Controller with Import Functionality
  * Location: backend/api.php
  * 
- * Pure REST controller that delegates business logic to model classes.
- * Handles HTTP routing, request/response formatting, and input validation.
+ * This replaces your existing api.php file with full import support
  */
 
 header('Content-Type: application/json');
@@ -18,6 +17,7 @@ require_once 'auth/Auth.php';
 require_once 'models/User.php';
 require_once 'models/Event.php';
 require_once 'models/CalendarUpdate.php';
+require_once 'models/EventImport.php';
 
 $method = $_SERVER['REQUEST_METHOD'];
 
@@ -25,6 +25,7 @@ $method = $_SERVER['REQUEST_METHOD'];
 $calendarUpdate = new CalendarUpdate($pdo);
 $userModel = new User($pdo, $calendarUpdate);
 $eventModel = new Event($pdo, $calendarUpdate);
+$eventImport = new EventImport($pdo, $calendarUpdate, $userModel, $eventModel);
 $auth = new Auth($pdo);
 
 // Initialize calendar updates system
@@ -94,14 +95,34 @@ function validateRequiredFields($input, $requiredFields) {
     }
 }
 
+/**
+ * Handle file upload validation
+ */
+function handleFileUpload() {
+    $contentType = $_SERVER['CONTENT_TYPE'] ?? '';
+    
+    if (strpos($contentType, 'multipart/form-data') === false) {
+        throw new Exception('Invalid content type for file upload');
+    }
+    
+    $maxFileSize = 5 * 1024 * 1024; // 5MB
+    $uploadedSize = $_SERVER['CONTENT_LENGTH'] ?? 0;
+    
+    if ($uploadedSize > $maxFileSize) {
+        throw new Exception('File size exceeds maximum allowed size of 5MB');
+    }
+    
+    return true;
+}
+
 // Route the request
-handleRequest(function() use ($pdo, $method, $auth, $userModel, $eventModel, $calendarUpdate) {
+handleRequest(function() use ($pdo, $method, $auth, $userModel, $eventModel, $calendarUpdate, $eventImport) {
     switch ($method) {
         case 'GET':
-            handleGetRequest($auth, $userModel, $eventModel, $calendarUpdate);
+            handleGetRequest($auth, $userModel, $eventModel, $calendarUpdate, $eventImport);
             break;
         case 'POST':
-            handlePostRequest($auth, $userModel, $eventModel, $calendarUpdate);
+            handlePostRequest($auth, $userModel, $eventModel, $calendarUpdate, $eventImport);
             break;
         case 'PUT':
             handlePutRequest($auth, $eventModel);
@@ -118,7 +139,7 @@ handleRequest(function() use ($pdo, $method, $auth, $userModel, $eventModel, $ca
 /**
  * Handle GET requests
  */
-function handleGetRequest($auth, $userModel, $eventModel, $calendarUpdate) {
+function handleGetRequest($auth, $userModel, $eventModel, $calendarUpdate, $eventImport) {
     $action = $_GET['action'] ?? '';
     
     switch ($action) {
@@ -197,7 +218,7 @@ function handleGetRequest($auth, $userModel, $eventModel, $calendarUpdate) {
             $currentUser = $auth->requireAuth();
             
             $limit = (int)($_GET['limit'] ?? 10);
-            $limit = max(1, min($limit, 50)); // Limit between 1 and 50
+            $limit = max(1, min($limit, 50));
             
             $events = $eventModel->getUpcomingEvents($currentUser['id'], $limit);
             sendResponse($events);
@@ -213,7 +234,7 @@ function handleGetRequest($auth, $userModel, $eventModel, $calendarUpdate) {
             
             $userId = $_GET['user_id'] ?? null;
             $limit = (int)($_GET['limit'] ?? 20);
-            $limit = max(1, min($limit, 100)); // Limit between 1 and 100
+            $limit = max(1, min($limit, 100));
             
             $events = $eventModel->searchEvents($query, $userId, $limit);
             sendResponse($events);
@@ -224,7 +245,6 @@ function handleGetRequest($auth, $userModel, $eventModel, $calendarUpdate) {
             
             $userId = $_GET['user_id'] ?? $currentUser['id'];
             if ($userId != $currentUser['id']) {
-                // Users can only see their own detailed stats
                 throw new Exception('You can only view your own event statistics');
             }
             
@@ -249,7 +269,7 @@ function handleGetRequest($auth, $userModel, $eventModel, $calendarUpdate) {
             
             $lastId = (int)($_GET['last_id'] ?? 0);
             $limit = (int)($_GET['limit'] ?? 10);
-            $limit = max(1, min($limit, 50)); // Limit between 1 and 50
+            $limit = max(1, min($limit, 50));
             
             $updates = $calendarUpdate->getUpdates($lastId, $limit);
             sendResponse($updates);
@@ -260,6 +280,47 @@ function handleGetRequest($auth, $userModel, $eventModel, $calendarUpdate) {
             
             $latestId = $calendarUpdate->getLatestUpdateId();
             sendResponse(['latest_id' => $latestId]);
+            break;
+            
+        // Import-related GET endpoints
+        case 'import_stats':
+            $currentUser = $auth->requireAuth();
+            
+            $userId = $_GET['user_id'] ?? $currentUser['id'];
+            if ($userId != $currentUser['id']) {
+                throw new Exception('You can only view your own import statistics');
+            }
+            
+            $stats = $eventImport->getImportStats($userId);
+            sendResponse($stats);
+            break;
+            
+        case 'supported_import_formats':
+            $auth->requireAuth();
+            
+            sendResponse([
+                'formats' => [
+                    'json' => [
+                        'name' => 'JSON',
+                        'extensions' => ['.json'],
+                        'description' => 'JavaScript Object Notation format'
+                    ],
+                    'csv' => [
+                        'name' => 'CSV',
+                        'extensions' => ['.csv', '.txt'],
+                        'description' => 'Comma-separated values format'
+                    ],
+                    'ics' => [
+                        'name' => 'ICS/iCal',
+                        'extensions' => ['.ics', '.ical'],
+                        'description' => 'iCalendar format'
+                    ]
+                ],
+                'limits' => [
+                    'max_file_size' => '5MB',
+                    'max_events' => 20
+                ]
+            ]);
             break;
             
         case 'test':
@@ -280,7 +341,61 @@ function handleGetRequest($auth, $userModel, $eventModel, $calendarUpdate) {
 /**
  * Handle POST requests
  */
-function handlePostRequest($auth, $userModel, $eventModel, $calendarUpdate) {
+function handlePostRequest($auth, $userModel, $eventModel, $calendarUpdate, $eventImport) {
+    // Check if this is a file upload request
+    $contentType = $_SERVER['CONTENT_TYPE'] ?? '';
+    
+    if (strpos($contentType, 'multipart/form-data') !== false) {
+        // Handle file upload requests
+        handleFileUpload();
+        
+        $action = $_POST['action'] ?? '';
+        
+        switch ($action) {
+            case 'validate_import_file':
+                $currentUser = $auth->requireAuth();
+                
+                if (!isset($_FILES['import_file'])) {
+                    throw new Exception('No file uploaded');
+                }
+                
+                $validation = $eventImport->validateImportFile($_FILES['import_file']);
+                sendResponse($validation);
+                break;
+                
+            case 'import_events':
+                $currentUser = $auth->requireAuth();
+                
+                if (!isset($_FILES['import_file'])) {
+                    throw new Exception('No file uploaded');
+                }
+                
+                $importResult = $eventImport->importEvents($_FILES['import_file'], $currentUser['id']);
+                
+                // Add import notification
+                if ($importResult['imported_count'] > 0) {
+                    $calendarUpdate->broadcastNotification(
+                        "{$currentUser['name']} imported {$importResult['imported_count']} events",
+                        'info',
+                        [
+                            'import_user' => $currentUser['name'],
+                            'imported_count' => $importResult['imported_count'],
+                            'error_count' => $importResult['error_count']
+                        ]
+                    );
+                }
+                
+                sendResponse($importResult, 201);
+                break;
+                
+            default:
+                throw new Exception('Invalid action for file upload');
+        }
+        
+        return;
+    }
+    
+    // Handle regular JSON requests
     $input = getJsonInput();
     $action = $input['action'] ?? '';
     
@@ -315,7 +430,6 @@ function handlePostRequest($auth, $userModel, $eventModel, $calendarUpdate) {
             break;
             
         case 'create_user':
-            // Legacy support - now requires authentication
             $currentUser = $auth->requireAuth();
             
             if (!isset($input['userName'])) {
@@ -327,7 +441,6 @@ function handlePostRequest($auth, $userModel, $eventModel, $calendarUpdate) {
                 throw new Exception('userName cannot be empty');
             }
             
-            // Return current user info for backward compatibility
             sendResponse([
                 'id' => $currentUser['id'],
                 'name' => $currentUser['name'],
@@ -357,7 +470,7 @@ function handlePostRequest($auth, $userModel, $eventModel, $calendarUpdate) {
             validateRequiredFields($input, ['query']);
             
             $limit = (int)($input['limit'] ?? 10);
-            $limit = max(1, min($limit, 50)); // Limit between 1 and 50
+            $limit = max(1, min($limit, 50));
             
             $users = $userModel->searchUsers($input['query'], $limit);
             sendResponse($users);
