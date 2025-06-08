@@ -1,36 +1,60 @@
 <?php
 /**
- * Dedicated Import Endpoint Handler
+ * Dedicated Import Endpoint Handler - Fixed Version
  * Location: backend/import.php
  * 
- * This is a separate endpoint specifically for handling imports
- * Can be used instead of modifying the main api.php if preferred
+ * This is a separate endpoint specifically for handling imports with proper error handling
  */
 
+// Set proper error handling to prevent HTML output
+ini_set('display_errors', 0);
+ini_set('log_errors', 1);
+error_reporting(E_ALL);
+
+// Set headers first
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: POST, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type');
 header('Access-Control-Allow-Credentials: true');
 
-require_once 'database/config.php';
-require_once 'auth/Auth.php';
-require_once 'models/User.php';
-require_once 'models/Event.php';
-require_once 'models/CalendarUpdate.php';
-require_once 'models/EventImport.php';
+// Start output buffering to capture any unwanted output
+ob_start();
+
+try {
+    require_once 'database/config.php';
+    require_once 'auth/Auth.php';
+    require_once 'models/User.php';
+    require_once 'models/Event.php';
+    require_once 'models/CalendarUpdate.php';
+    require_once 'models/EventImport.php';
+} catch (Exception $e) {
+    // Clean any output buffer and send error
+    ob_clean();
+    http_response_code(500);
+    echo json_encode(['error' => 'Server configuration error: ' . $e->getMessage()]);
+    exit();
+}
 
 $method = $_SERVER['REQUEST_METHOD'];
 
-// Initialize models
-$calendarUpdate = new CalendarUpdate($pdo);
-$userModel = new User($pdo, $calendarUpdate);
-$eventModel = new Event($pdo, $calendarUpdate);
-$eventImport = new EventImport($pdo, $calendarUpdate, $userModel, $eventModel);
-$auth = new Auth($pdo);
+// Initialize models with error handling
+try {
+    $calendarUpdate = new CalendarUpdate($pdo);
+    $userModel = new User($pdo, $calendarUpdate);
+    $eventModel = new Event($pdo, $calendarUpdate);
+    $eventImport = new EventImport($pdo, $calendarUpdate, $userModel, $eventModel);
+    $auth = new Auth($pdo);
+} catch (Exception $e) {
+    ob_clean();
+    http_response_code(500);
+    echo json_encode(['error' => 'Database initialization error: ' . $e->getMessage()]);
+    exit();
+}
 
 // Handle preflight requests
 if ($method === 'OPTIONS') {
+    ob_clean();
     http_response_code(200);
     exit();
 }
@@ -39,6 +63,11 @@ if ($method === 'OPTIONS') {
  * Send JSON response
  */
 function sendResponse($data, $statusCode = 200) {
+    // Clear any output buffer
+    if (ob_get_level()) {
+        ob_clean();
+    }
+    
     http_response_code($statusCode);
     echo json_encode($data);
     exit();
@@ -48,6 +77,11 @@ function sendResponse($data, $statusCode = 200) {
  * Handle errors
  */
 function handleError($message, $statusCode = 400) {
+    // Clear any output buffer
+    if (ob_get_level()) {
+        ob_clean();
+    }
+    
     error_log("Import API Error: " . $message);
     sendResponse(['error' => $message], $statusCode);
 }
@@ -206,4 +240,7 @@ try {
 } catch (Exception $e) {
     handleError($e->getMessage(), 500);
 }
+
+// End output buffering
+ob_end_flush();
 ?>

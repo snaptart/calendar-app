@@ -109,7 +109,7 @@ class EventImport {
      * @return string File format (json, csv, ics)
      * @throws Exception If format is not supported
      */
-    private function detectFileFormat($fileData) {
+    public function detectFileFormat($fileData) {
         $fileName = strtolower($fileData['name']);
         $extension = pathinfo($fileName, PATHINFO_EXTENSION);
         
@@ -149,7 +149,7 @@ class EventImport {
      * @return array Parsed events
      * @throws Exception If parsing fails
      */
-    private function parseFileContent($content, $format) {
+    public function parseFileContent($content, $format) {
         switch ($format) {
             case 'json':
                 return $this->parseJsonContent($content);
@@ -393,7 +393,7 @@ class EventImport {
      * @return array Processed event
      * @throws Exception If validation fails
      */
-    private function validateAndProcessEvent($eventData, &$userCache) {
+    public function validateAndProcessEvent($eventData, &$userCache) {
         // Required fields validation
         if (empty($eventData['title'])) {
             throw new Exception('Event title is required');
