@@ -1,4 +1,4 @@
-// Frontend JavaScript for collaborative calendar with working drag and drop
+// Frontend JavaScript for collaborative calendar with xdsoft datetimepicker
 // Save as: script.js
 
 class CollaborativeCalendar {
@@ -17,10 +17,103 @@ class CollaborativeCalendar {
     }
     
     init() {
+        this.initializeDatetimePickers();
         this.initializeCalendar();
         this.setupEventListeners();
         this.setupSSE();
         this.loadUsers();
+    }
+    
+    initializeDatetimePickers() {
+        // Initialize xdsoft datetimepicker for event start and end inputs
+        const datetimePickerOptions = {
+            format: 'Y-m-d H:i',
+            formatTime: 'H:i',
+            formatDate: 'Y-m-d',
+            step: 15, // 15-minute intervals
+            minDate: false,
+            maxDate: false,
+            allowTimes: [],
+            opened: false,
+            defaultTime: '09:00',
+            timepicker: true,
+            datepicker: true,
+            weeks: false,
+            theme: 'default',
+            lang: 'en',
+            yearStart: new Date().getFullYear() - 5,
+            yearEnd: new Date().getFullYear() + 5,
+            todayButton: true,
+            defaultSelect: false,
+            scrollMonth: false,
+            scrollTime: false,
+            scrollInput: false,
+            lazyInit: false,
+            mask: false,
+            validateOnBlur: true,
+            allowBlank: false,
+            closeOnDateSelect: false,
+            closeOnTimeSelect: true,
+            closeOnWithoutClick: true,
+            timepickerScrollbar: true,
+            onSelectDate: function(ct, $i) {
+                // Auto-set end time to 1 hour after start time if this is the start picker
+                if ($i.attr('id') === 'eventStart') {
+                    const endPicker = $('#eventEnd');
+                    if (!endPicker.val()) {
+                        const endTime = new Date(ct.getTime() + 60 * 60 * 1000); // Add 1 hour
+                        endPicker.datetimepicker('setOptions', {
+                            value: endTime,
+                            minDate: ct
+                        });
+                    } else {
+                        endPicker.datetimepicker('setOptions', {
+                            minDate: ct
+                        });
+                    }
+                }
+            },
+            onSelectTime: function(ct, $i) {
+                // Auto-set end time to 1 hour after start time if this is the start picker
+                if ($i.attr('id') === 'eventStart') {
+                    const endPicker = $('#eventEnd');
+                    if (!endPicker.val()) {
+                        const endTime = new Date(ct.getTime() + 60 * 60 * 1000); // Add 1 hour
+                        endPicker.datetimepicker('setOptions', {
+                            value: endTime,
+                            minDate: ct
+                        });
+                    } else {
+                        endPicker.datetimepicker('setOptions', {
+                            minDate: ct
+                        });
+                    }
+                }
+            }
+        };
+        
+        // Initialize both datetime pickers
+        $('#eventStart').datetimepicker(datetimePickerOptions);
+        $('#eventEnd').datetimepicker(datetimePickerOptions);
+        
+        // Set minimum date for end picker when start changes
+        $('#eventStart').on('change', function() {
+            const startDate = $(this).datetimepicker('getValue');
+            if (startDate) {
+                $('#eventEnd').datetimepicker('setOptions', {
+                    minDate: startDate
+                });
+                
+                // If end date is before start date, update it
+                const endDate = $('#eventEnd').datetimepicker('getValue');
+                if (!endDate || endDate <= startDate) {
+                    const newEndDate = new Date(startDate.getTime() + 60 * 60 * 1000);
+                    $('#eventEnd').datetimepicker('setOptions', {
+                        value: newEndDate
+                    });
+                }
+            }
+        });
     }
     
     initializeCalendar() {
@@ -509,8 +602,35 @@ class CollaborativeCalendar {
         
         // Set form values
         document.getElementById('eventTitle').value = eventData.title || '';
-        document.getElementById('eventStart').value = this.formatDateTimeLocal(eventData.start || new Date());
-        document.getElementById('eventEnd').value = this.formatDateTimeLocal(eventData.end || eventData.start || new Date());
+        
+        // Set datetime picker values
+        if (eventData.start) {
+            const startDate = this.parseEventDateTime(eventData.start);
+            $('#eventStart').datetimepicker('setOptions', { value: startDate });
+        } else {
+            // Default to current time rounded to next 15-minute interval
+            const now = new Date();
+            const roundedMinutes = Math.ceil(now.getMinutes() / 15) * 15;
+            now.setMinutes(roundedMinutes, 0, 0);
+            $('#eventStart').datetimepicker('setOptions', { value: now });
+        }
+        
+        if (eventData.end) {
+            const endDate = this.parseEventDateTime(eventData.end);
+            $('#eventEnd').datetimepicker('setOptions', { value: endDate });
+        } else if (eventData.start) {
+            // Set end to 1 hour after start
+            const startDate = this.parseEventDateTime(eventData.start);
+            const endDate = new Date(startDate.getTime() + 60 * 60 * 1000);
+            $('#eventEnd').datetimepicker('setOptions', { value: endDate });
+        } else {
+            // Default to 1 hour from now rounded to next 15-minute interval
+            const now = new Date();
+            const roundedMinutes = Math.ceil(now.getMinutes() / 15) * 15;
+            now.setMinutes(roundedMinutes, 0, 0);
+            const endTime = new Date(now.getTime() + 60 * 60 * 1000);
+            $('#eventEnd').datetimepicker('setOptions', { value: endTime });
+        }
         
         // Update modal title and show/hide delete button
         if (eventData.id) {
@@ -530,6 +650,10 @@ class CollaborativeCalendar {
     closeEventModal() {
         document.getElementById('eventModal').style.display = 'none';
         this.currentEvent = null;
+        
+        // Clear datetime picker values
+        $('#eventStart').val('');
+        $('#eventEnd').val('');
     }
     
     async saveEvent() {
@@ -539,18 +663,22 @@ class CollaborativeCalendar {
         }
         
         const title = document.getElementById('eventTitle').value.trim();
-        const start = document.getElementById('eventStart').value;
-        const end = document.getElementById('eventEnd').value;
+        const startValue = $('#eventStart').val();
+        const endValue = $('#eventEnd').val();
         
-        if (!title || !start) {
+        if (!title || !startValue) {
             alert('Please fill in all required fields!');
             return;
         }
         
+        // Convert datetime picker values to ISO format
+        const start = this.formatDateTimeForAPI(startValue);
+        const end = endValue ? this.formatDateTimeForAPI(endValue) : start;
+        
         const eventData = {
             title,
             start,
-            end: end || start,
+            end,
             userName: this.currentUser
         };
         
@@ -678,25 +806,54 @@ class CollaborativeCalendar {
         statusEl.className = `status ${className}`;
     }
     
-    formatDateTimeLocal(dateString) {
-        if (!dateString) return '';
+    // Helper method to parse event datetime strings
+    parseEventDateTime(dateTimeStr) {
+        if (!dateTimeStr) return new Date();
         
-        const date = new Date(dateString);
+        // Handle various datetime formats from FullCalendar
+        let date;
+        if (dateTimeStr.includes('T')) {
+            // ISO format: 2025-06-08T14:30:00
+            date = new Date(dateTimeStr);
+        } else if (dateTimeStr.includes(' ')) {
+            // SQL format: 2025-06-08 14:30:00
+            date = new Date(dateTimeStr.replace(' ', 'T'));
+        } else {
+            // Date only: 2025-06-08
+            date = new Date(dateTimeStr + 'T09:00:00');
+        }
+        
+        return isNaN(date.getTime()) ? new Date() : date;
+    }
+    
+    // Helper method to format datetime for API (MySQL format)
+    formatDateTimeForAPI(dateTimeStr) {
+        if (!dateTimeStr) return '';
+        
+        // xdsoft datetimepicker returns format: YYYY-MM-DD HH:MM
+        // Convert to MySQL datetime format: YYYY-MM-DD HH:MM:SS
+        const parts = dateTimeStr.split(' ');
+        if (parts.length === 2) {
+            return `${parts[0]} ${parts[1]}:00`;
+        }
+        
+        // Fallback: try to parse as date and format
+        const date = new Date(dateTimeStr);
         if (isNaN(date.getTime())) return '';
         
-        // Format as YYYY-MM-DDTHH:MM for datetime-local input
         const year = date.getFullYear();
         const month = String(date.getMonth() + 1).padStart(2, '0');
         const day = String(date.getDate()).padStart(2, '0');
         const hours = String(date.getHours()).padStart(2, '0');
         const minutes = String(date.getMinutes()).padStart(2, '0');
+        const seconds = String(date.getSeconds()).padStart(2, '0');
         
-        return `${year}-${month}-${day}T${hours}:${minutes}`;
+        return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
     }
 }
 
 // Initialize the calendar when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
-    console.log('Initializing Collaborative Calendar with drag and drop support...');
+    console.log('Initializing Collaborative Calendar with xdsoft datetimepicker...');
     new CollaborativeCalendar();
 });
