@@ -36,6 +36,9 @@
 						<a href="./users.html" class="nav-link">
 							Users
 						</a>
+						<a href="./import.html" class="nav-link">
+							📥 Import Events
+						</a>
 					</nav>
 				</div>
 				<div class="user-section">
@@ -62,6 +65,10 @@
                 <button id="addEventBtn" class="btn btn-primary">
                     <span class="btn-icon">+</span>
                     Add Event
+                </button>
+                <button id="importEventsBtn" class="btn btn-outline">
+                    <span class="btn-icon">📥</span>
+                    Import Events
                 </button>
                 <div class="connection-status">
                     <span id="connectionStatus" class="status">Initializing...</span>
@@ -112,5 +119,17 @@
     
     <!-- Application JavaScript -->
     <script src="../js/script.js"></script>
+    
+    <script>
+        // Add import button functionality
+        document.addEventListener('DOMContentLoaded', () => {
+            const importEventsBtn = document.getElementById('importEventsBtn');
+            if (importEventsBtn) {
+                importEventsBtn.addEventListener('click', () => {
+                    window.location.href = './import.html';
+                });
+            }
+        });
+    </script>
 </body>
 </html>
