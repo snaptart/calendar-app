@@ -43,7 +43,7 @@ const EventBus = (() => {
 const Config = {
     apiEndpoints: {
         api: '../../backend/api.php',
-        import: '../../backend/import.php'
+        import: '../../backend/api.php'  // FIXED: Use main API, not separate import.php
     },
     limits: {
         maxFileSize: 5 * 1024 * 1024, // 5MB
@@ -176,10 +176,16 @@ const Utils = {
 const ImportAPI = (() => {
     const makeRequest = async (url, options = {}) => {
         try {
+            console.log('Making request to:', url);
+            console.log('Request options:', options);
+            
             const response = await fetch(url, {
                 credentials: 'include',
                 ...options
             });
+            
+            console.log('Response status:', response.status);
+            console.log('Response headers:', response.headers);
             
             if (response.status === 401) {
                 EventBus.emit('auth:unauthorized');
@@ -191,7 +197,9 @@ const ImportAPI = (() => {
                 throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
             }
             
-            return await response.json();
+            const data = await response.json();
+            console.log('Response data:', data);
+            return data;
         } catch (error) {
             console.error('Import API Request failed:', error);
             throw error;
@@ -204,48 +212,51 @@ const ImportAPI = (() => {
             return makeRequest(`${Config.apiEndpoints.api}?action=check_auth`);
         },
         
-        // Validate import file
+        // Validate import file - FIXED: Use main API endpoint
         validateFile(file) {
             const formData = new FormData();
             formData.append('import_file', file);
             formData.append('action', 'validate');
             
-            return makeRequest(Config.apiEndpoints.import, {
+            console.log('Validating file:', file.name, 'size:', file.size);
+            
+            return makeRequest(Config.apiEndpoints.api, {
                 method: 'POST',
                 body: formData
             });
         },
         
-        // Preview import file
+        // Preview import file - FIXED: Use main API endpoint
         previewFile(file) {
             const formData = new FormData();
             formData.append('import_file', file);
             formData.append('action', 'preview');
             
-            return makeRequest(Config.apiEndpoints.import, {
+            console.log('Previewing file:', file.name, 'size:', file.size);
+            
+            return makeRequest(Config.apiEndpoints.api, {
                 method: 'POST',
                 body: formData
             });
         },
         
-        // Import events from file
+        // Import events from file - FIXED: Use main API endpoint
         importEvents(file) {
             const formData = new FormData();
             formData.append('import_file', file);
             formData.append('action', 'import');
             
-            return makeRequest(Config.apiEndpoints.import, {
+            console.log('Importing file:', file.name, 'size:', file.size);
+            
+            return makeRequest(Config.apiEndpoints.api, {
                 method: 'POST',
                 body: formData
             });
         },
         
-        // Get supported formats
+        // Get supported formats - FIXED: Use main API endpoint
         getSupportedFormats() {
-            return makeRequest(`${Config.apiEndpoints.import}?action=formats`, {
-                method: 'POST',
-                body: new FormData() // Empty form data for POST requirement
-            });
+            return makeRequest(`${Config.apiEndpoints.api}?action=formats`);
         }
     };
 })();

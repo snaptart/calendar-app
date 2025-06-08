@@ -1,6 +1,6 @@
 <?php
 /**
- * Standalone Import Worker - Can be called directly or via proxy
+ * Standalone Import Worker - Fixed Function Conflicts
  * Location: backend/workers/import.php
  * 
  * This worker handles all import functionality and can be accessed
@@ -26,29 +26,67 @@ if (!ob_get_level()) {
     ob_start();
 }
 
-// Determine if we're being called directly or via proxy
-$calledViaProxy = (strpos($_SERVER['SCRIPT_NAME'], 'api.php') !== false);
+// Better path detection and resolution
+$currentScript = $_SERVER['SCRIPT_NAME'];
+$currentDir = dirname(__FILE__);
+$backendDir = dirname($currentDir); // Go up from workers/ to backend/
 
-// Adjust include paths based on how we're called
-if ($calledViaProxy) {
-    // Called via proxy from api.php - paths are relative to backend/
-    $basePath = '';
-} else {
-    // Called directly - paths are relative to backend/workers/
-    $basePath = '../';
+// Debug logging
+error_log("Import Worker Debug - Script: {$currentScript}, Current Dir: {$currentDir}, Backend Dir: {$backendDir}");
+
+// Always use absolute paths based on current file location
+$basePath = $backendDir . '/';
+
+// Verify the base path exists
+if (!is_dir($basePath)) {
+    error_log("Import Worker Error - Backend directory not found: {$basePath}");
+    if (ob_get_level()) ob_clean();
+    http_response_code(500);
+    echo json_encode(['error' => 'Backend directory not found']);
+    exit();
 }
 
 try {
-    require_once $basePath . 'database/config.php';
-    require_once $basePath . 'auth/Auth.php';
-    require_once $basePath . 'models/User.php';
-    require_once $basePath . 'models/Event.php';
-    require_once $basePath . 'models/CalendarUpdate.php';
-    require_once $basePath . 'models/EventImport.php';
+    // Use absolute paths
+    $configPath = $basePath . 'database/config.php';
+    $authPath = $basePath . 'auth/Auth.php';
+    $userModelPath = $basePath . 'models/User.php';
+    $eventModelPath = $basePath . 'models/Event.php';
+    $calendarUpdatePath = $basePath . 'models/CalendarUpdate.php';
+    $eventImportPath = $basePath . 'models/EventImport.php';
+    
+    // Check if files exist before including
+    $requiredFiles = [
+        'config' => $configPath,
+        'auth' => $authPath,
+        'user' => $userModelPath,
+        'event' => $eventModelPath,
+        'calendar_update' => $calendarUpdatePath,
+        'event_import' => $eventImportPath
+    ];
+    
+    foreach ($requiredFiles as $name => $path) {
+        if (!file_exists($path)) {
+            error_log("Import Worker Error - Required file not found: {$name} at {$path}");
+            throw new Exception("Required file not found: {$name}");
+        }
+    }
+    
+    // Include all required files
+    require_once $configPath;
+    require_once $authPath;
+    require_once $userModelPath;
+    require_once $eventModelPath;
+    require_once $calendarUpdatePath;
+    require_once $eventImportPath;
+    
+    error_log("Import Worker Debug - All files included successfully");
+    
 } catch (Exception $e) {
     // Clean any output buffer and send error
     if (ob_get_level()) ob_clean();
     http_response_code(500);
+    error_log("Import Worker Error - Include failed: " . $e->getMessage());
     echo json_encode(['error' => 'Server configuration error: ' . $e->getMessage()]);
     exit();
 }
@@ -57,14 +95,26 @@ $method = $_SERVER['REQUEST_METHOD'];
 
 // Initialize models with error handling
 try {
+	// Make PDO global when included via proxy
+	global $pdo;
+
+	// Check if PDO exists
+	if (!isset($pdo)) {
+		throw new Exception('Database connection not available');
+	}
+    
     $calendarUpdate = new CalendarUpdate($pdo);
     $userModel = new User($pdo, $calendarUpdate);
     $eventModel = new Event($pdo, $calendarUpdate);
     $eventImport = new EventImport($pdo, $calendarUpdate, $userModel, $eventModel);
     $auth = new Auth($pdo);
+    
+    error_log("Import Worker Debug - All models initialized successfully");
+    
 } catch (Exception $e) {
     if (ob_get_level()) ob_clean();
     http_response_code(500);
+    error_log("Import Worker Error - Model initialization failed: " . $e->getMessage());
     echo json_encode(['error' => 'Database initialization error: ' . $e->getMessage()]);
     exit();
 }
@@ -77,9 +127,9 @@ if ($method === 'OPTIONS') {
 }
 
 /**
- * Send JSON response
+ * Send JSON response (renamed to avoid conflicts)
  */
-function sendResponse($data, $statusCode = 200) {
+function sendImportResponse($data, $statusCode = 200) {
     // Clear any output buffer
     if (ob_get_level()) {
         ob_clean();
@@ -91,49 +141,51 @@ function sendResponse($data, $statusCode = 200) {
 }
 
 /**
- * Handle errors
+ * Handle errors (renamed to avoid conflicts)
  */
-function handleError($message, $statusCode = 400) {
+function handleImportError($message, $statusCode = 400) {
     // Clear any output buffer
     if (ob_get_level()) {
         ob_clean();
     }
     
     error_log("Import Worker Error: " . $message);
-    sendResponse(['error' => $message], $statusCode);
+    sendImportResponse(['error' => $message], $statusCode);
 }
 
 /**
- * Validate file size
+ * Validate file size (renamed to avoid conflicts)
  */
-function validateFileSize() {
+function validateImportFileSize() {
     $maxFileSize = 5 * 1024 * 1024; // 5MB
     $uploadedSize = $_SERVER['CONTENT_LENGTH'] ?? 0;
     
     if ($uploadedSize > $maxFileSize) {
-        handleError('File size exceeds maximum allowed size of 5MB');
+        handleImportError('File size exceeds maximum allowed size of 5MB');
     }
 }
 
 /**
- * Log import activity
+ * Log import activity (renamed to avoid conflicts)
  */
-function logImportActivity($userId, $action, $details = []) {
+function logImportWorkerActivity($userId, $action, $details = []) {
     error_log("Import Activity - User: {$userId}, Action: {$action}, Details: " . json_encode($details));
 }
 
 /**
  * Handle GET requests (for format information, etc.)
  */
-function handleGetRequest($auth, $eventImport) {
+function handleImportGetRequest($auth, $eventImport) {
     $action = $_GET['action'] ?? '';
+    
+    error_log("Import Worker - Handling GET request with action: {$action}");
     
     switch ($action) {
         case 'import_formats':
         case 'supported_import_formats':
         case 'formats':
             // Don't require auth for format information
-            sendResponse([
+            sendImportResponse([
                 'supported_formats' => [
                     'json' => [
                         'name' => 'JSON',
@@ -204,16 +256,15 @@ function handleGetRequest($auth, $eventImport) {
                 'name' => $currentUser['name']
             ];
             
-            sendResponse($stats);
+            sendImportResponse($stats);
             break;
             
         case 'test':
             $currentUser = $auth->requireAuth();
             
-            sendResponse([
+            sendImportResponse([
                 'status' => 'success',
                 'message' => 'Import worker is operational',
-                'access_method' => $GLOBALS['calledViaProxy'] ? 'proxied' : 'direct',
                 'user' => [
                     'id' => $currentUser['id'],
                     'name' => $currentUser['name']
@@ -236,58 +287,75 @@ function handleGetRequest($auth, $eventImport) {
             break;
             
         default:
-            handleError('Invalid GET action. Supported: formats, stats, test');
+            handleImportError('Invalid GET action. Supported: formats, stats, test');
     }
 }
 
 // Route the request based on method
 if ($method === 'GET') {
-    handleGetRequest($auth, $eventImport);
+    try {
+        handleImportGetRequest($auth, $eventImport);
+    } catch (Exception $e) {
+        error_log("Import Worker Error in GET handler: " . $e->getMessage());
+        handleImportError($e->getMessage(), 500);
+    }
     exit();
 }
 
 // Only allow POST requests for file operations
 if ($method !== 'POST') {
-    handleError('Method not allowed. This endpoint accepts GET and POST requests only.', 405);
+    handleImportError('Method not allowed. This endpoint accepts GET and POST requests only.', 405);
 }
 
 try {
+    error_log("Import Worker - Processing POST request");
+    
     // Require authentication for all POST operations
     $currentUser = $auth->requireAuth();
+    error_log("Import Worker - User authenticated: " . $currentUser['name'] . " (ID: " . $currentUser['id'] . ")");
     
     // Validate file size early for POST requests
-    validateFileSize();
+    validateImportFileSize();
     
     // Determine the action
     $action = $_POST['action'] ?? $_GET['action'] ?? 'import';
+    error_log("Import Worker - Action: {$action}");
     
     // Handle different types of POST requests
     $contentType = $_SERVER['CONTENT_TYPE'] ?? '';
+    error_log("Import Worker - Content Type: {$contentType}");
     
     if (strpos($contentType, 'multipart/form-data') !== false) {
         // File upload request
-        handleFileUploadRequest($currentUser, $action, $eventImport, $calendarUpdate);
+        error_log("Import Worker - Processing file upload request");
+        handleImportFileUploadRequest($currentUser, $action, $eventImport, $calendarUpdate);
     } else {
         // Regular form data or other POST request
-        handleRegularPostRequest($currentUser, $action, $eventImport);
+        error_log("Import Worker - Processing regular POST request");
+        handleImportRegularPostRequest($currentUser, $action, $eventImport);
     }
     
 } catch (Exception $e) {
     // Log the error with context
-    logImportActivity($currentUser['id'] ?? 'unknown', 'error', [
+    error_log("Import Worker Error in main handler: " . $e->getMessage());
+    error_log("Import Worker Error stack trace: " . $e->getTraceAsString());
+    
+    logImportWorkerActivity($currentUser['id'] ?? 'unknown', 'error', [
         'error_message' => $e->getMessage(),
         'action' => $_POST['action'] ?? $_GET['action'] ?? 'unknown'
     ]);
     
-    handleError($e->getMessage(), 500);
+    handleImportError($e->getMessage(), 500);
 }
 
 /**
- * Handle file upload requests
+ * Handle file upload requests (renamed to avoid conflicts)
  */
-function handleFileUploadRequest($currentUser, $action, $eventImport, $calendarUpdate) {
+function handleImportFileUploadRequest($currentUser, $action, $eventImport, $calendarUpdate) {
+    error_log("Import Worker - handleImportFileUploadRequest called with action: {$action}");
+    
     // Log the import attempt
-    logImportActivity($currentUser['id'], "attempt_{$action}", [
+    logImportWorkerActivity($currentUser['id'], "attempt_{$action}", [
         'file_name' => $_FILES['import_file']['name'] ?? 'unknown',
         'file_size' => $_FILES['import_file']['size'] ?? 0
     ]);
@@ -295,32 +363,40 @@ function handleFileUploadRequest($currentUser, $action, $eventImport, $calendarU
     switch ($action) {
         case 'validate':
         case 'validate_import_file':
+            error_log("Import Worker - Validating file upload");
+            
             // Validate import file without actually importing
             if (!isset($_FILES['import_file'])) {
-                handleError('No file uploaded for validation');
+                handleImportError('No file uploaded for validation');
             }
+            
+            // Debug file info
+            $fileInfo = $_FILES['import_file'];
+            error_log("Import Worker - File info: " . json_encode($fileInfo));
             
             $validation = $eventImport->validateImportFile($_FILES['import_file']);
             
-            logImportActivity($currentUser['id'], 'validate_complete', [
+            logImportWorkerActivity($currentUser['id'], 'validate_complete', [
                 'valid' => $validation['valid'],
                 'event_count' => $validation['event_count'] ?? 0
             ]);
             
-            sendResponse($validation);
+            sendImportResponse($validation);
             break;
             
         case 'import':
         case 'import_events':
+            error_log("Import Worker - Importing file");
+            
             // Import events from file
             if (!isset($_FILES['import_file'])) {
-                handleError('No file uploaded for import');
+                handleImportError('No file uploaded for import');
             }
             
             $importResult = $eventImport->importEvents($_FILES['import_file'], $currentUser['id']);
             
             // Log import completion
-            logImportActivity($currentUser['id'], 'import_complete', [
+            logImportWorkerActivity($currentUser['id'], 'import_complete', [
                 'imported_count' => $importResult['imported_count'],
                 'error_count' => $importResult['error_count'],
                 'total_events' => $importResult['total_events']
@@ -350,14 +426,16 @@ function handleFileUploadRequest($currentUser, $action, $eventImport, $calendarU
                 );
             }
             
-            sendResponse($importResult, 201);
+            sendImportResponse($importResult, 201);
             break;
             
         case 'preview':
         case 'preview_import':
+            error_log("Import Worker - Previewing file");
+            
             // Preview import without saving to database
             if (!isset($_FILES['import_file'])) {
-                handleError('No file uploaded for preview');
+                handleImportError('No file uploaded for preview');
             }
             
             // Create a temporary instance for preview only
@@ -407,23 +485,23 @@ function handleFileUploadRequest($currentUser, $action, $eventImport, $calendarU
                 $validation['showing_first'] = min($previewLimit, count($events));
             }
             
-            logImportActivity($currentUser['id'], 'preview_complete', [
+            logImportWorkerActivity($currentUser['id'], 'preview_complete', [
                 'valid' => $validation['valid'],
                 'event_count' => $validation['event_count'] ?? 0
             ]);
             
-            sendResponse($validation);
+            sendImportResponse($validation);
             break;
             
         default:
-            handleError('Invalid file upload action. Supported: validate, import, preview');
+            handleImportError('Invalid file upload action. Supported: validate, import, preview');
     }
 }
 
 /**
- * Handle regular POST requests (non-file upload)
+ * Handle regular POST requests (non-file upload) (renamed to avoid conflicts)
  */
-function handleRegularPostRequest($currentUser, $action, $eventImport) {
+function handleImportRegularPostRequest($currentUser, $action, $eventImport) {
     switch ($action) {
         case 'stats':
             $stats = $eventImport->getImportStats($currentUser['id']);
@@ -431,11 +509,11 @@ function handleRegularPostRequest($currentUser, $action, $eventImport) {
                 'id' => $currentUser['id'],
                 'name' => $currentUser['name']
             ];
-            sendResponse($stats);
+            sendImportResponse($stats);
             break;
             
         default:
-            handleError('Invalid POST action without file upload. For file operations, use multipart/form-data.');
+            handleImportError('Invalid POST action without file upload. For file operations, use multipart/form-data.');
     }
 }
 
