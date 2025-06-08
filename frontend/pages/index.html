@@ -23,17 +23,31 @@
 </head>
 <body>
     <div class="container">
-        <header>
-            <div class="header-content">
-                <h1>📅 Collaborative Calendar</h1>
-                <div class="user-section">
-                    <label for="userName">Logged in as</label>
-                    <input type="text" id="userName" placeholder="Authenticating..." disabled />
-                    <span id="userStatus" class="status">Checking authentication...</span>
-                    <!-- Logout button will be added dynamically -->
-                </div>
-            </div>
-        </header>
+		<header>
+			<div class="header-content">
+				<div class="header-left">
+					<h1>
+						📅 Collaborative Calendar
+					</h1>
+					<nav class="main-navigation">
+						<a href="./index.html" class="nav-link active">
+							Calendar
+						</a>
+						<a href="./users.html" class="nav-link">
+							Users
+						</a>
+					</nav>
+				</div>
+				<div class="user-section">
+					<label for="userName">
+						Logged in as
+					</label>
+					<input type="text" id="userName" placeholder="Authenticating..." disabled />
+					<span id="userStatus" class="status">Checking authentication...</span>
+					<!-- Logout button will be added dynamically -->
+				</div>
+			</div>
+		</header>
 
         <div class="calendar-controls">
             <div class="user-filters">

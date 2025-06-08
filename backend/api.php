@@ -75,6 +75,65 @@ function handleGet($pdo, $auth) {
             $stmt = $pdo->query("SELECT id, name, color, created_at FROM users ORDER BY name");
             echo json_encode($stmt->fetchAll());
             break;
+
+		case 'users_with_stats':
+			// Get all users with event statistics (requires authentication)
+			$currentUser = $auth->requireAuth();
+
+			try {
+				// Get all users
+				$stmt = $pdo->query("
+            SELECT
+                u.id,
+                u.name,
+                u.email,
+                u.color,
+                u.created_at,
+                u.last_login,
+                COUNT(e.id) as event_count
+            FROM users u
+            LEFT JOIN events e ON u.id = e.user_id
+            GROUP BY u.id, u.name, u.email, u.color, u.created_at, u.last_login
+            ORDER BY u.name ASC
+        ");
+
+				$users = $stmt->fetchAll();
+
+				// Format the data for better frontend consumption
+				$formattedUsers = array_map(function($user) {
+					// Determine user status based on last login
+					$status = 'new';
+					if ($user['last_login'] && $user['last_login'] !== '0000-00-00 00:00:00') {
+						$lastLogin = new DateTime($user['last_login']);
+						$now = new DateTime();
+						$daysDiff = $now->diff($lastLogin)->days;
+
+						if ($daysDiff <= 1) {
+							$status = 'active';
+						} else {
+							$status = 'inactive';
+						}
+					}
+
+					return [
+						'id' => (int)$user['id'],
+						'name' => $user['name'],
+						'email' => $user['email'],
+						'color' => $user['color'],
+						'created_at' => $user['created_at'],
+						'last_login' => $user['last_login'],
+						'event_count' => (int)$user['event_count'],
+						'status' => $status
+					];
+				}, $users);
+
+				echo json_encode($formattedUsers);
+			} catch (PDOException $e) {
+				error_log("Error fetching users with stats: " . $e->getMessage());
+				http_response_code(500);
+				echo json_encode(['error' => 'Failed to fetch users data']);
+			}
+			break;
             
         case 'events':
             // Get events (requires authentication)

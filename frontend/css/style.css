@@ -87,6 +87,64 @@ header h1 {
     color: #a0aec0;
 }
 
+/* Navigation Styles - Add to frontend/css/style.css */
+
+.header-left {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+}
+
+.main-navigation {
+	display: flex;
+	gap: 16px;
+	align-items: center;
+}
+
+.nav-link {
+	color: #4a5568;
+	text-decoration: none;
+	font-size: 0.875rem;
+	font-weight: 500;
+	padding: 8px 16px;
+	border-radius: 6px;
+	transition: all 0.2s ease;
+	border: 1px solid transparent;
+}
+
+.nav-link:hover {
+	color: #2d3748;
+	background: #f7fafc;
+	border-color: #e2e8f0;
+	text-decoration: none;
+}
+
+.nav-link.active {
+	color: #4299e1;
+	background: #ebf8ff;
+	border-color: #4299e1;
+	font-weight: 600;
+}
+
+/* Responsive navigation */
+@media (max-width: 768px) {
+	.header-left {
+		text-align: center;
+		align-items: center;
+	}
+
+	.main-navigation {
+		justify-content: center;
+		flex-wrap: wrap;
+		gap: 12px;
+	}
+
+	.nav-link {
+		font-size: 0.75rem;
+		padding: 6px 12px;
+	}
+}
+
 /* Calendar Controls */
 .calendar-controls {
     background: white;
