@@ -1,4 +1,4 @@
-// Frontend JavaScript for collaborative calendar
+// Frontend JavaScript for collaborative calendar with working drag and drop
 // Save as: script.js
 
 class CollaborativeCalendar {
@@ -33,17 +33,45 @@ class CollaborativeCalendar {
                 center: 'title',
                 right: 'dayGridMonth,timeGridWeek,timeGridDay,listWeek'
             },
+            
+            // CRITICAL: Enable editing for drag and drop
+            editable: true,
             selectable: true,
             selectMirror: true,
+            
+            // Enable event interaction
+            eventStartEditable: true,
+            eventDurationEditable: true,
+            eventResizableFromStart: true,
+            
+            // Visual settings
             dayMaxEvents: true,
             weekends: true,
+            height: 'auto',
+            
+            // Events array
             events: [],
             
-            // Event handlers
+            // Event handlers for interaction
             select: (info) => this.handleDateSelect(info),
             eventClick: (info) => this.handleEventClick(info),
             eventDrop: (info) => this.handleEventMove(info),
-            eventResize: (info) => this.handleEventResize(info)
+            eventResize: (info) => this.handleEventResize(info),
+            
+            // Add visual feedback during drag
+            eventMouseEnter: (info) => this.handleEventMouseEnter(info),
+            eventMouseLeave: (info) => this.handleEventMouseLeave(info),
+            
+            // Validate before allowing drag/drop
+            eventAllow: (dropInfo, draggedEvent) => {
+                return this.validateEventEdit(draggedEvent);
+            },
+            
+            // Additional drag feedback
+            eventDragStart: (info) => this.handleEventDragStart(info),
+            eventDragStop: (info) => this.handleEventDragStop(info),
+            eventResizeStart: (info) => this.handleEventResizeStart(info),
+            eventResizeStop: (info) => this.handleEventResizeStop(info)
         });
         
         this.calendar.render();
@@ -304,6 +332,76 @@ class CollaborativeCalendar {
         }
     }
     
+    // NEW: Validate if user can edit event before allowing drag/drop
+    validateEventEdit(event) {
+        if (!this.currentUser) {
+            return false;
+        }
+        return event.extendedProps.userName === this.currentUser;
+    }
+    
+    // NEW: Visual feedback on mouse enter
+    handleEventMouseEnter(info) {
+        const canEdit = this.validateEventEdit(info.event);
+        if (canEdit) {
+            info.el.style.cursor = 'move';
+            info.el.style.opacity = '0.8';
+        } else {
+            info.el.style.cursor = 'not-allowed';
+        }
+    }
+    
+    // NEW: Reset visual feedback on mouse leave
+    handleEventMouseLeave(info) {
+        info.el.style.cursor = '';
+        info.el.style.opacity = '';
+    }
+    
+    // NEW: Visual feedback when drag starts
+    handleEventDragStart(info) {
+        console.log('Drag started for event:', info.event.title);
+        info.el.style.opacity = '0.5';
+        this.showDragFeedback('Moving event...');
+    }
+    
+    // NEW: Reset visual feedback when drag stops
+    handleEventDragStop(info) {
+        console.log('Drag stopped for event:', info.event.title);
+        info.el.style.opacity = '';
+        this.hideDragFeedback();
+    }
+    
+    // NEW: Visual feedback when resize starts
+    handleEventResizeStart(info) {
+        console.log('Resize started for event:', info.event.title);
+        info.el.style.opacity = '0.5';
+        this.showDragFeedback('Resizing event...');
+    }
+    
+    // NEW: Reset visual feedback when resize stops
+    handleEventResizeStop(info) {
+        console.log('Resize stopped for event:', info.event.title);
+        info.el.style.opacity = '';
+        this.hideDragFeedback();
+    }
+    
+    // NEW: Show drag feedback message
+    showDragFeedback(message) {
+        const statusEl = document.getElementById('connectionStatus');
+        statusEl.textContent = message;
+        statusEl.className = 'status';
+        statusEl.style.backgroundColor = '#f39c12';
+        statusEl.style.color = 'white';
+    }
+    
+    // NEW: Hide drag feedback message
+    hideDragFeedback() {
+        // Restore connection status
+        setTimeout(() => {
+            this.updateConnectionStatus('Connected', 'connected');
+        }, 1000);
+    }
+    
     handleDateSelect(info) {
         if (!this.currentUser) {
             alert('Please enter your name first!');
@@ -320,7 +418,7 @@ class CollaborativeCalendar {
     
     handleEventClick(info) {
         const event = info.event;
-        const canEdit = event.extendedProps.userName === this.currentUser;
+        const canEdit = this.validateEventEdit(event);
         
         if (!canEdit) {
             alert(`This event belongs to ${event.extendedProps.userName}. You can only edit your own events.`);
@@ -338,35 +436,69 @@ class CollaborativeCalendar {
     async handleEventMove(info) {
         const event = info.event;
         
-        if (event.extendedProps.userName !== this.currentUser) {
+        console.log('Event move detected:', {
+            eventId: event.id,
+            eventTitle: event.title,
+            newStart: event.startStr,
+            newEnd: event.endStr,
+            userName: event.extendedProps.userName,
+            currentUser: this.currentUser
+        });
+        
+        if (!this.validateEventEdit(event)) {
+            console.log('Move reverted: user cannot edit this event');
             info.revert();
             alert('You can only move your own events!');
             return;
         }
         
-        await this.updateEvent({
-            id: event.id,
-            title: event.title,
-            start: event.startStr,
-            end: event.endStr || event.startStr
-        });
+        try {
+            await this.updateEvent({
+                id: event.id,
+                title: event.title,
+                start: event.startStr,
+                end: event.endStr || event.startStr
+            });
+            console.log('Event move saved successfully');
+        } catch (error) {
+            console.error('Error saving moved event:', error);
+            info.revert();
+            alert('Error saving event move. Changes reverted.');
+        }
     }
     
     async handleEventResize(info) {
         const event = info.event;
         
-        if (event.extendedProps.userName !== this.currentUser) {
+        console.log('Event resize detected:', {
+            eventId: event.id,
+            eventTitle: event.title,
+            newStart: event.startStr,
+            newEnd: event.endStr,
+            userName: event.extendedProps.userName,
+            currentUser: this.currentUser
+        });
+        
+        if (!this.validateEventEdit(event)) {
+            console.log('Resize reverted: user cannot edit this event');
             info.revert();
             alert('You can only resize your own events!');
             return;
         }
         
-        await this.updateEvent({
-            id: event.id,
-            title: event.title,
-            start: event.startStr,
-            end: event.endStr || event.startStr
-        });
+        try {
+            await this.updateEvent({
+                id: event.id,
+                title: event.title,
+                start: event.startStr,
+                end: event.endStr || event.startStr
+            });
+            console.log('Event resize saved successfully');
+        } catch (error) {
+            console.error('Error saving resized event:', error);
+            info.revert();
+            alert('Error saving event resize. Changes reverted.');
+        }
     }
     
     openEventModal(eventData = {}) {
@@ -439,6 +571,8 @@ class CollaborativeCalendar {
     }
     
     async createEvent(eventData) {
+        console.log('Creating event:', eventData);
+        
         const response = await fetch('api.php', {
             method: 'POST',
             headers: {
@@ -448,13 +582,18 @@ class CollaborativeCalendar {
         });
         
         if (!response.ok) {
-            throw new Error('Failed to create event');
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.error || 'Failed to create event');
         }
         
-        return response.json();
+        const result = await response.json();
+        console.log('Event created successfully:', result);
+        return result;
     }
     
     async updateEvent(eventData) {
+        console.log('Updating event:', eventData);
+        
         const response = await fetch('api.php', {
             method: 'PUT',
             headers: {
@@ -464,10 +603,13 @@ class CollaborativeCalendar {
         });
         
         if (!response.ok) {
-            throw new Error('Failed to update event');
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.error || 'Failed to update event');
         }
         
-        return response.json();
+        const result = await response.json();
+        console.log('Event updated successfully:', result);
+        return result;
     }
     
     async deleteEvent() {
@@ -476,14 +618,18 @@ class CollaborativeCalendar {
         }
         
         try {
+            console.log('Deleting event:', this.currentEvent.id);
+            
             const response = await fetch(`api.php?id=${this.currentEvent.id}`, {
                 method: 'DELETE'
             });
             
             if (!response.ok) {
-                throw new Error('Failed to delete event');
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.error || 'Failed to delete event');
             }
             
+            console.log('Event deleted successfully');
             this.closeEventModal();
         } catch (error) {
             console.error('Error deleting event:', error);
@@ -494,11 +640,13 @@ class CollaborativeCalendar {
     addEventToCalendar(eventData) {
         // Only add if this user's calendar is selected
         if (this.selectedUsers.has(eventData.extendedProps.userId.toString())) {
+            console.log('Adding event to calendar:', eventData);
             this.calendar.addEvent(eventData);
         }
     }
     
     updateEventInCalendar(eventData) {
+        console.log('Updating event in calendar:', eventData);
         const event = this.calendar.getEventById(eventData.id);
         if (event) {
             event.setProp('title', eventData.title);
@@ -508,6 +656,7 @@ class CollaborativeCalendar {
     }
     
     removeEventFromCalendar(eventId) {
+        console.log('Removing event from calendar:', eventId);
         const event = this.calendar.getEventById(eventId);
         if (event) {
             event.remove();
@@ -518,6 +667,8 @@ class CollaborativeCalendar {
         const statusEl = document.getElementById('connectionStatus');
         statusEl.textContent = message;
         statusEl.className = `status ${className}`;
+        statusEl.style.backgroundColor = '';
+        statusEl.style.color = '';
     }
     
     updateUserStatus(message, className = '') {
@@ -545,5 +696,6 @@ class CollaborativeCalendar {
 
 // Initialize the calendar when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
+    console.log('Initializing Collaborative Calendar with drag and drop support...');
     new CollaborativeCalendar();
 });
