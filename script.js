@@ -6,6 +6,7 @@ class CollaborativeCalendar {
         this.calendar = null;
         this.eventSource = null;
         this.currentUser = '';
+        this.currentUserId = null;
         this.selectedUsers = new Set();
         this.allUsers = [];
         this.currentEvent = null;
@@ -53,6 +54,17 @@ class CollaborativeCalendar {
         const userNameInput = document.getElementById('userName');
         userNameInput.addEventListener('change', (e) => {
             this.setCurrentUser(e.target.value.trim());
+        });
+        
+        // Also trigger on blur and Enter key
+        userNameInput.addEventListener('blur', (e) => {
+            this.setCurrentUser(e.target.value.trim());
+        });
+        
+        userNameInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                this.setCurrentUser(e.target.value.trim());
+            }
         });
         
         // Add event button
@@ -146,6 +158,12 @@ class CollaborativeCalendar {
             this.lastEventId = parseInt(e.lastEventId);
         });
         
+        this.eventSource.addEventListener('user_created', (e) => {
+            // Refresh users list when a new user is created
+            this.loadUsers();
+            this.lastEventId = parseInt(e.lastEventId);
+        });
+        
         this.eventSource.addEventListener('heartbeat', (e) => {
             // Keep connection alive
             this.lastEventId = parseInt(e.lastEventId) || this.lastEventId;
@@ -220,18 +238,48 @@ class CollaborativeCalendar {
         });
     }
     
-    setCurrentUser(userName) {
-        if (!userName) return;
+    async setCurrentUser(userName) {
+        if (!userName) {
+            this.currentUser = '';
+            this.currentUserId = null;
+            this.updateUserStatus('');
+            return;
+        }
         
-        this.currentUser = userName;
-        this.updateUserStatus(`Set as: ${userName}`, 'user-set');
-        
-        // Find user in list and auto-select their calendar
-        const user = this.allUsers.find(u => u.name === userName);
-        if (user) {
-            this.selectedUsers.add(user.id.toString());
+        try {
+            // Create or get user from database
+            const response = await fetch('api.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    action: 'create_user',
+                    userName: userName
+                })
+            });
+            
+            if (!response.ok) {
+                throw new Error('Failed to create/get user');
+            }
+            
+            const userData = await response.json();
+            
+            this.currentUser = userData.name;
+            this.currentUserId = userData.id;
+            this.updateUserStatus(`Set as: ${userData.name}`, 'user-set');
+            
+            // Refresh users list to include the new user
+            await this.loadUsers();
+            
+            // Auto-select the current user's calendar
+            this.selectedUsers.add(userData.id.toString());
             this.renderUserCheckboxes();
             this.loadEvents();
+            
+        } catch (error) {
+            console.error('Error setting current user:', error);
+            this.updateUserStatus('Error setting user', 'disconnected');
         }
     }
     

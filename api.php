@@ -123,7 +123,20 @@ function handleGet($pdo) {
 function handlePost($pdo) {
     $input = json_decode(file_get_contents('php://input'), true);
     
-    if (!$input || !isset($input['userName']) || !isset($input['title'])) {
+    if (!$input) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Invalid JSON input']);
+        return;
+    }
+    
+    // Check if this is a user creation request
+    if (isset($input['action']) && $input['action'] === 'create_user') {
+        handleCreateUser($pdo, $input);
+        return;
+    }
+    
+    // Handle event creation
+    if (!isset($input['userName']) || !isset($input['title'])) {
         http_response_code(400);
         echo json_encode(['error' => 'Missing required fields: userName and title are required']);
         return;
@@ -195,6 +208,76 @@ function handlePost($pdo) {
     broadcastUpdate($pdo, 'create', $formattedEvent);
     
     echo json_encode($formattedEvent);
+}
+
+function handleCreateUser($pdo, $input) {
+    if (!isset($input['userName'])) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Missing userName field']);
+        return;
+    }
+    
+    $userName = trim($input['userName']);
+    
+    if (empty($userName)) {
+        http_response_code(400);
+        echo json_encode(['error' => 'userName cannot be empty']);
+        return;
+    }
+    
+    try {
+        // Check if user already exists
+        $stmt = $pdo->prepare("SELECT * FROM users WHERE name = ?");
+        $stmt->execute([$userName]);
+        $existingUser = $stmt->fetch();
+        
+        if ($existingUser) {
+            // User already exists, return existing user
+            echo json_encode($existingUser);
+            return;
+        }
+        
+        // Create new user with random color
+        $colors = ['#e74c3c', '#2ecc71', '#f39c12', '#9b59b6', '#1abc9c', '#34495e', '#e67e22', '#3498db'];
+        $color = $colors[array_rand($colors)];
+        
+        $stmt = $pdo->prepare("INSERT INTO users (name, color) VALUES (?, ?)");
+        $stmt->execute([$userName, $color]);
+        
+        $newUser = [
+            'id' => $pdo->lastInsertId(),
+            'name' => $userName,
+            'color' => $color,
+            'created_at' => date('Y-m-d H:i:s')
+        ];
+        
+        // Broadcast that a new user was created
+        broadcastUpdate($pdo, 'user_created', [
+            'user' => $newUser,
+            'message' => "New user '{$userName}' joined the calendar"
+        ]);
+        
+        echo json_encode($newUser);
+        
+    } catch (PDOException $e) {
+        error_log("Error creating user: " . $e->getMessage());
+        
+        // Check if it's a duplicate key error
+        if ($e->getCode() == 23000) {
+            // User was created by another request, fetch and return
+            $stmt = $pdo->prepare("SELECT * FROM users WHERE name = ?");
+            $stmt->execute([$userName]);
+            $user = $stmt->fetch();
+            
+            if ($user) {
+                echo json_encode($user);
+                return;
+            }
+        }
+        
+        http_response_code(500);
+        echo json_encode(['error' => 'Failed to create user']);
+    }
 }
 
 function handlePut($pdo) {
