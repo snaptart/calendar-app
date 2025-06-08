@@ -1,7 +1,7 @@
 // Enhanced Import Page JavaScript with Full Functionality
 // Location: frontend/js/import.js
 // 
-// Complete import functionality with validation, preview, and import
+// FIXED VERSION - Complete import functionality with validation, preview, and import
 
 // =============================================================================
 // CORE UTILITIES AND EVENT BUS
@@ -43,7 +43,7 @@ const EventBus = (() => {
 const Config = {
     apiEndpoints: {
         api: '../../backend/api.php',
-        import: '../../backend/api.php'  // FIXED: Use main API, not separate import.php
+        import: '../../backend/api.php'  // Use main API endpoint for all operations
     },
     limits: {
         maxFileSize: 5 * 1024 * 1024, // 5MB
@@ -167,11 +167,11 @@ const Utils = {
 };
 
 // =============================================================================
-// API CLIENT
+// API CLIENT - FIXED
 // =============================================================================
 
 /**
- * API communication for import operations
+ * FIXED API communication for import operations
  */
 const ImportAPI = (() => {
     const makeRequest = async (url, options = {}) => {
@@ -185,7 +185,6 @@ const ImportAPI = (() => {
             });
             
             console.log('Response status:', response.status);
-            console.log('Response headers:', response.headers);
             
             if (response.status === 401) {
                 EventBus.emit('auth:unauthorized');
@@ -193,8 +192,17 @@ const ImportAPI = (() => {
             }
             
             if (!response.ok) {
-                const errorData = await response.json().catch(() => ({}));
-                throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
+                let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+                try {
+                    const errorData = await response.json();
+                    if (errorData.error) {
+                        errorMessage = errorData.error;
+                    }
+                } catch (e) {
+                    // If we can't parse JSON, use the status text
+                    console.warn('Could not parse error response as JSON');
+                }
+                throw new Error(errorMessage);
             }
             
             const data = await response.json();
@@ -212,11 +220,11 @@ const ImportAPI = (() => {
             return makeRequest(`${Config.apiEndpoints.api}?action=check_auth`);
         },
         
-        // Validate import file - FIXED: Use main API endpoint
+        // FIXED: Validate import file with correct action parameter
         validateFile(file) {
             const formData = new FormData();
             formData.append('import_file', file);
-            formData.append('action', 'validate');
+            formData.append('action', 'validate_import_file'); // FIXED: Use correct action name
             
             console.log('Validating file:', file.name, 'size:', file.size);
             
@@ -226,11 +234,11 @@ const ImportAPI = (() => {
             });
         },
         
-        // Preview import file - FIXED: Use main API endpoint
+        // FIXED: Preview import file with correct action parameter
         previewFile(file) {
             const formData = new FormData();
             formData.append('import_file', file);
-            formData.append('action', 'preview');
+            formData.append('action', 'preview_import'); // FIXED: Use correct action name
             
             console.log('Previewing file:', file.name, 'size:', file.size);
             
@@ -240,11 +248,11 @@ const ImportAPI = (() => {
             });
         },
         
-        // Import events from file - FIXED: Use main API endpoint
+        // FIXED: Import events from file with correct action parameter
         importEvents(file) {
             const formData = new FormData();
             formData.append('import_file', file);
-            formData.append('action', 'import');
+            formData.append('action', 'import_events'); // FIXED: Use correct action name
             
             console.log('Importing file:', file.name, 'size:', file.size);
             
@@ -254,9 +262,9 @@ const ImportAPI = (() => {
             });
         },
         
-        // Get supported formats - FIXED: Use main API endpoint
+        // FIXED: Get supported formats with correct action parameter
         getSupportedFormats() {
-            return makeRequest(`${Config.apiEndpoints.api}?action=formats`);
+            return makeRequest(`${Config.apiEndpoints.api}?action=import_formats`); // FIXED: Use correct action name
         }
     };
 })();
@@ -381,9 +389,16 @@ const UIManager = (() => {
         if (isLoading) {
             button.disabled = true;
             button.classList.add('loading');
+            const originalText = button.textContent;
+            button.dataset.originalText = originalText;
+            button.textContent = 'Processing...';
         } else {
             button.disabled = false;
             button.classList.remove('loading');
+            if (button.dataset.originalText) {
+                button.textContent = button.dataset.originalText;
+                delete button.dataset.originalText;
+            }
         }
     };
     
@@ -609,7 +624,7 @@ const ValidationManager = (() => {
             displayValidationResults(result);
             
             if (result.valid) {
-                Utils.showNotification(`File is valid! Found ${result.event_count} events to import.`, 'success');
+                Utils.showNotification(`File is valid! Found ${result.event_count || 0} events to import.`, 'success');
                 
                 // Enable import button if validation passed
                 const importBtn = document.getElementById('importBtn');
@@ -641,7 +656,7 @@ const ValidationManager = (() => {
         const icon = result.valid ? '✅' : '❌';
         const title = result.valid ? 'File Valid' : 'Validation Failed';
         const summary = result.valid 
-            ? `Your file is valid and ready for import. ${result.event_count} events found.`
+            ? `Your file is valid and ready for import. ${result.event_count || 0} events found.`
             : `File validation failed. Please fix the issues below and try again.`;
         
         resultsBody.innerHTML = `
@@ -723,11 +738,11 @@ const ValidationManager = (() => {
 })();
 
 // =============================================================================
-// PREVIEW MANAGER
+// PREVIEW MANAGER - FIXED
 // =============================================================================
 
 /**
- * Manages event preview functionality
+ * FIXED: Manages event preview functionality
  */
 const PreviewManager = (() => {
     let previewData = null;
@@ -748,17 +763,27 @@ const PreviewManager = (() => {
             const result = await ImportAPI.previewFile(file);
             previewData = result;
             
+            // FIXED: Check for different response structures
             if (result.valid && result.detailed_preview) {
                 showPreviewModal(result.detailed_preview);
+                Utils.showNotification(`Preview generated! Found ${result.total_events || result.event_count || 0} events.`, 'success');
+            } else if (result.valid && result.preview) {
+                // Handle alternative preview structure
+                showPreviewModal(result.preview);
+                Utils.showNotification(`Preview generated! Found ${result.event_count || 0} events.`, 'success');
+            } else if (result.event_count !== undefined) {
+                // Show validation results if no detailed preview
+                displayPreviewResults(result);
+                Utils.showNotification('File analyzed. Check results below for details.', 'info');
             } else {
                 Utils.showNotification('Cannot preview file. Please validate first.', 'warning');
-                // Show validation results instead
-                ValidationManager.displayValidationResults(result);
+                displayPreviewError(result.error || 'Unknown error during preview');
             }
             
         } catch (error) {
             console.error('Preview error:', error);
             Utils.showNotification(`Preview failed: ${error.message}`, 'error');
+            displayPreviewError(error.message);
         } finally {
             UIManager.setButtonLoading(previewBtn, false);
             UIManager.hideProgressModal();
@@ -769,11 +794,23 @@ const PreviewManager = (() => {
         const modal = document.getElementById('previewModal');
         const content = document.getElementById('previewContent');
         
-        if (!modal || !content) return;
+        if (!modal || !content) {
+            console.error('Preview modal elements not found');
+            return;
+        }
         
-        // Create preview table
-        const validEvents = previewEvents.filter(event => event.valid);
-        const invalidEvents = previewEvents.filter(event => !event.valid);
+        // FIXED: Handle different preview data structures
+        let validEvents = [];
+        let invalidEvents = [];
+        
+        if (Array.isArray(previewEvents)) {
+            validEvents = previewEvents.filter(event => event.valid === true);
+            invalidEvents = previewEvents.filter(event => event.valid === false);
+        } else {
+            console.warn('Preview events is not an array:', previewEvents);
+            Utils.showNotification('Preview data format is unexpected', 'warning');
+            return;
+        }
         
         content.innerHTML = `
             <div class="preview-summary">
@@ -796,54 +833,136 @@ const PreviewManager = (() => {
             
             ${validEvents.length > 0 ? `
                 <h4>Valid Events (will be imported):</h4>
-                <table class="preview-table">
-                    <thead>
-                        <tr>
-                            <th>Status</th>
-                            <th>Title</th>
-                            <th>Start</th>
-                            <th>End</th>
-                            <th>User</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${validEvents.map(event => `
-                            <tr class="preview-row valid">
-                                <td><span class="preview-status valid">Valid</span></td>
-                                <td>${event.title || 'N/A'}</td>
-                                <td>${Utils.formatDateTime(event.start)}</td>
-                                <td>${Utils.formatDateTime(event.end)}</td>
-                                <td>User ID: ${event.user_id}</td>
+                <div class="preview-table-container">
+                    <table class="preview-table">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Title</th>
+                                <th>Start</th>
+                                <th>End</th>
+                                <th>User</th>
                             </tr>
-                        `).join('')}
-                    </tbody>
-                </table>
-            ` : ''}
+                        </thead>
+                        <tbody>
+                            ${validEvents.map((event, index) => `
+                                <tr class="preview-row valid">
+                                    <td>${event.index || index + 1}</td>
+                                    <td>${event.title || 'N/A'}</td>
+                                    <td>${Utils.formatDateTime(event.start)}</td>
+                                    <td>${Utils.formatDateTime(event.end)}</td>
+                                    <td>User ID: ${event.user_id || 'Unknown'}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            ` : '<p>No valid events found in this file.</p>'}
             
             ${invalidEvents.length > 0 ? `
                 <h4>Invalid Events (will be skipped):</h4>
-                <table class="preview-table">
-                    <thead>
-                        <tr>
-                            <th>Status</th>
-                            <th>Error</th>
-                            <th>Raw Data</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${invalidEvents.map(event => `
-                            <tr class="preview-row invalid">
-                                <td><span class="preview-status invalid">Invalid</span></td>
-                                <td>${event.error || 'Unknown error'}</td>
-                                <td><pre>${JSON.stringify(event.raw_data, null, 2)}</pre></td>
+                <div class="preview-table-container">
+                    <table class="preview-table">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Error</th>
+                                <th>Raw Data</th>
                             </tr>
-                        `).join('')}
-                    </tbody>
-                </table>
+                        </thead>
+                        <tbody>
+                            ${invalidEvents.map((event, index) => `
+                                <tr class="preview-row invalid">
+                                    <td>${event.index || index + 1}</td>
+                                    <td class="error-cell">${event.error || 'Unknown error'}</td>
+                                    <td class="raw-data-cell">
+                                        <pre>${JSON.stringify(event.raw_data || {}, null, 2)}</pre>
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
             ` : ''}
         `;
         
         modal.style.display = 'block';
+    };
+    
+    // FIXED: Add function to display preview results when no modal is shown
+    const displayPreviewResults = (result) => {
+        const resultsSection = document.getElementById('resultsSection');
+        const resultsTitle = document.getElementById('resultsTitle');
+        const resultsBody = document.getElementById('resultsBody');
+        
+        if (!resultsSection || !resultsTitle || !resultsBody) return;
+        
+        resultsTitle.textContent = 'Preview Results';
+        
+        const cardClass = result.valid ? 'success' : 'warning';
+        const icon = result.valid ? '👁️' : '⚠️';
+        const title = 'File Preview';
+        const summary = result.valid 
+            ? `File contains ${result.event_count || 0} events. Use the preview button to see details.`
+            : `File has issues that need to be resolved before import.`;
+        
+        resultsBody.innerHTML = `
+            <div class="result-card ${cardClass}">
+                <div class="result-header">
+                    <span class="result-icon">${icon}</span>
+                    <h4 class="result-title">${title}</h4>
+                </div>
+                <p class="result-summary">${summary}</p>
+                
+                <div class="result-stats">
+                    <div class="stat-item">
+                        <span class="stat-number">${result.event_count || 0}</span>
+                        <span class="stat-label">Events Found</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-number">${result.format || 'Unknown'}</span>
+                        <span class="stat-label">File Format</span>
+                    </div>
+                </div>
+                
+                ${result.error ? `
+                    <div class="result-details">
+                        <h5>Issues:</h5>
+                        <div class="detail-item error">${result.error}</div>
+                    </div>
+                ` : ''}
+            </div>
+        `;
+        
+        resultsSection.style.display = 'block';
+        resultsSection.classList.add('slide-up');
+    };
+    
+    // FIXED: Add function to display preview errors
+    const displayPreviewError = (errorMessage) => {
+        const resultsSection = document.getElementById('resultsSection');
+        const resultsTitle = document.getElementById('resultsTitle');
+        const resultsBody = document.getElementById('resultsBody');
+        
+        if (!resultsSection || !resultsTitle || !resultsBody) return;
+        
+        resultsTitle.textContent = 'Preview Error';
+        
+        resultsBody.innerHTML = `
+            <div class="result-card error">
+                <div class="result-header">
+                    <span class="result-icon">❌</span>
+                    <h4 class="result-title">Preview Failed</h4>
+                </div>
+                <p class="result-summary">An error occurred while generating the preview.</p>
+                <div class="result-details">
+                    <div class="detail-item error">${errorMessage}</div>
+                </div>
+            </div>
+        `;
+        
+        resultsSection.style.display = 'block';
+        resultsSection.classList.add('slide-up');
     };
     
     const closePreviewModal = () => {
@@ -884,10 +1003,8 @@ const ImportManager = (() => {
             return;
         }
         
-        // Check if file has been validated
-        const validationResult = FileManager.getValidationResult();
-        if (!validationResult || !validationResult.valid) {
-            Utils.showNotification('Please validate the file first', 'warning');
+        // Confirm import
+        if (!confirm(`Are you sure you want to import events from "${file.name}"?`)) {
             return;
         }
         
@@ -951,7 +1068,7 @@ const ImportManager = (() => {
                 
                 <div class="result-stats">
                     <div class="stat-item">
-                        <span class="stat-number">${result.total_processed || 0}</span>
+                        <span class="stat-number">${result.total_events || result.total_processed || 0}</span>
                         <span class="stat-label">Total Processed</span>
                     </div>
                     <div class="stat-item">
@@ -973,7 +1090,7 @@ const ImportManager = (() => {
                         <h5>Successfully Imported Events:</h5>
                         ${result.imported_events.map(event => `
                             <div class="detail-item success">
-                                ${event.title} - ${Utils.formatDateTime(event.start_datetime)}
+                                ${event.title} - ${Utils.formatDateTime(event.start_datetime || event.start)}
                             </div>
                         `).join('')}
                     </div>
@@ -982,7 +1099,7 @@ const ImportManager = (() => {
                 ${result.errors && result.errors.length > 0 ? `
                     <div class="result-details">
                         <h5>Import Errors:</h5>
-                        ${result.errors.map(error => `<div class="detail-item error">${error}</div>`).join('')}
+                        ${result.errors.map(error => `<div class="detail-item error">${typeof error === 'string' ? error : error.error || 'Unknown error'}</div>`).join('')}
                     </div>
                 ` : ''}
                 

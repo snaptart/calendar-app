@@ -1,6 +1,6 @@
 <?php
 /**
- * Standalone Import Worker - Fixed Function Conflicts
+ * Standalone Import Worker - Fixed Variable Scope Issues
  * Location: backend/workers/import.php
  * 
  * This worker handles all import functionality and can be accessed
@@ -93,15 +93,18 @@ try {
 
 $method = $_SERVER['REQUEST_METHOD'];
 
-// Initialize models with error handling
+// Initialize models with error handling - FIXED: Make variables global
 try {
-	// Make PDO global when included via proxy
-	global $pdo;
+    // Make PDO global when included via proxy
+    global $pdo;
 
-	// Check if PDO exists
-	if (!isset($pdo)) {
-		throw new Exception('Database connection not available');
-	}
+    // Check if PDO exists
+    if (!isset($pdo)) {
+        throw new Exception('Database connection not available');
+    }
+    
+    // FIXED: Make all models global so they can be accessed in functions
+    global $calendarUpdate, $userModel, $eventModel, $eventImport, $auth;
     
     $calendarUpdate = new CalendarUpdate($pdo);
     $userModel = new User($pdo, $calendarUpdate);
@@ -349,9 +352,12 @@ try {
 }
 
 /**
- * Handle file upload requests (renamed to avoid conflicts)
+ * Handle file upload requests - FIXED: Use global variables
  */
 function handleImportFileUploadRequest($currentUser, $action, $eventImport, $calendarUpdate) {
+    // FIXED: Access global variables
+    global $pdo, $userModel, $eventModel;
+    
     error_log("Import Worker - handleImportFileUploadRequest called with action: {$action}");
     
     // Log the import attempt
@@ -438,7 +444,7 @@ function handleImportFileUploadRequest($currentUser, $action, $eventImport, $cal
                 handleImportError('No file uploaded for preview');
             }
             
-            // Create a temporary instance for preview only
+            // FIXED: Create a temporary instance for preview with global variables
             $previewImport = new EventImport($pdo, null, $userModel, null);
             $validation = $previewImport->validateImportFile($_FILES['import_file']);
             
