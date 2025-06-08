@@ -10,8 +10,6 @@ header('Access-Control-Allow-Headers: Content-Type');
 require_once 'config.php';
 
 $method = $_SERVER['REQUEST_METHOD'];
-$path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
-$pathParts = explode('/', trim($path, '/'));
 
 // Handle preflight requests
 if ($method === 'OPTIONS') {
@@ -19,7 +17,18 @@ if ($method === 'OPTIONS') {
     exit();
 }
 
-try {
+// Error handling wrapper
+function handleRequest($callback) {
+    try {
+        $callback();
+    } catch (Exception $e) {
+        error_log("API Error: " . $e->getMessage());
+        http_response_code(500);
+        echo json_encode(['error' => 'Server error: ' . $e->getMessage()]);
+    }
+}
+
+handleRequest(function() use ($pdo, $method) {
     switch ($method) {
         case 'GET':
             handleGet($pdo);
@@ -37,10 +46,7 @@ try {
             http_response_code(405);
             echo json_encode(['error' => 'Method not allowed']);
     }
-} catch (Exception $e) {
-    http_response_code(500);
-    echo json_encode(['error' => $e->getMessage()]);
-}
+});
 
 function handleGet($pdo) {
     $action = $_GET['action'] ?? '';
@@ -54,7 +60,12 @@ function handleGet($pdo) {
         case 'events':
             $userIds = $_GET['user_ids'] ?? '';
             if ($userIds) {
-                $userIds = explode(',', $userIds);
+                $userIds = array_filter(explode(',', $userIds), 'is_numeric');
+                if (empty($userIds)) {
+                    echo json_encode([]);
+                    return;
+                }
+                
                 $placeholders = str_repeat('?,', count($userIds) - 1) . '?';
                 $stmt = $pdo->prepare("
                     SELECT e.*, u.name as user_name, u.color as user_color 
@@ -94,6 +105,15 @@ function handleGet($pdo) {
             echo json_encode($formattedEvents);
             break;
             
+        case 'test':
+            // Test endpoint to verify API is working
+            echo json_encode([
+                'status' => 'success',
+                'message' => 'API is working',
+                'timestamp' => time()
+            ]);
+            break;
+            
         default:
             http_response_code(400);
             echo json_encode(['error' => 'Invalid action']);
@@ -105,12 +125,32 @@ function handlePost($pdo) {
     
     if (!$input || !isset($input['userName']) || !isset($input['title'])) {
         http_response_code(400);
-        echo json_encode(['error' => 'Missing required fields']);
+        echo json_encode(['error' => 'Missing required fields: userName and title are required']);
+        return;
+    }
+    
+    // Validate input
+    $userName = trim($input['userName']);
+    $title = trim($input['title']);
+    
+    if (empty($userName) || empty($title)) {
+        http_response_code(400);
+        echo json_encode(['error' => 'userName and title cannot be empty']);
         return;
     }
     
     // Get or create user
-    $user = getOrCreateUser($pdo, $input['userName']);
+    $user = getOrCreateUser($pdo, $userName);
+    
+    // Validate dates
+    $startDate = $input['start'];
+    $endDate = $input['end'] ?? $input['start'];
+    
+    if (!$startDate) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Start date is required']);
+        return;
+    }
     
     // Create event
     $stmt = $pdo->prepare("
@@ -120,9 +160,9 @@ function handlePost($pdo) {
     
     $stmt->execute([
         $user['id'],
-        $input['title'],
-        $input['start'],
-        $input['end'] ?? $input['start']
+        $title,
+        $startDate,
+        $endDate
     ]);
     
     $eventId = $pdo->lastInsertId();
@@ -166,6 +206,13 @@ function handlePut($pdo) {
         return;
     }
     
+    // Validate required fields
+    if (!isset($input['title']) || !isset($input['start'])) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Missing required fields: title and start are required']);
+        return;
+    }
+    
     // Update event
     $stmt = $pdo->prepare("
         UPDATE events 
@@ -174,11 +221,18 @@ function handlePut($pdo) {
     ");
     
     $stmt->execute([
-        $input['title'],
+        trim($input['title']),
         $input['start'],
         $input['end'] ?? $input['start'],
         $input['id']
     ]);
+    
+    // Check if event was actually updated
+    if ($stmt->rowCount() === 0) {
+        http_response_code(404);
+        echo json_encode(['error' => 'Event not found or no changes made']);
+        return;
+    }
     
     // Get updated event with user info
     $stmt = $pdo->prepare("
@@ -218,9 +272,9 @@ function handlePut($pdo) {
 function handleDelete($pdo) {
     $eventId = $_GET['id'] ?? null;
     
-    if (!$eventId) {
+    if (!$eventId || !is_numeric($eventId)) {
         http_response_code(400);
-        echo json_encode(['error' => 'Missing event ID']);
+        echo json_encode(['error' => 'Missing or invalid event ID']);
         return;
     }
     
@@ -242,6 +296,6 @@ function handleDelete($pdo) {
     // Broadcast update
     broadcastUpdate($pdo, 'delete', ['id' => $eventId]);
     
-    echo json_encode(['success' => true]);
+    echo json_encode(['success' => true, 'message' => 'Event deleted successfully']);
 }
 ?>
