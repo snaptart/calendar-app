@@ -1,4 +1,4 @@
-// Frontend JavaScript for collaborative calendar with xdsoft datetimepicker
+// Frontend JavaScript for collaborative calendar - FIXED VERSION
 // Location: frontend/js/script.js
 
 class CollaborativeCalendar {
@@ -12,6 +12,9 @@ class CollaborativeCalendar {
         this.currentEvent = null;
         this.lastEventId = 0;
         this.reconnectAttempts = 0;
+        this.isConnected = false;
+        this.processedEventIds = new Set(); // Track processed events to prevent duplicates
+        this.eventProcessingTimeout = null;
         
         // API endpoints - relative to frontend location
         this.apiEndpoints = {
@@ -245,19 +248,25 @@ class CollaborativeCalendar {
     connectSSE() {
         if (this.eventSource) {
             this.eventSource.close();
+            this.isConnected = false;
         }
         
         this.updateConnectionStatus('Connecting...');
+        console.log('Attempting SSE connection with lastEventId:', this.lastEventId);
         
         this.eventSource = new EventSource(`${this.apiEndpoints.sse}?lastEventId=${this.lastEventId}`);
         
         this.eventSource.onopen = () => {
             this.updateConnectionStatus('Connected', 'connected');
+            this.isConnected = true;
             this.reconnectAttempts = 0; // Reset on successful connection
+            console.log('SSE connection established');
         };
         
-        this.eventSource.onerror = () => {
+        this.eventSource.onerror = (e) => {
+            console.log('SSE connection error:', e);
             this.updateConnectionStatus('Disconnected', 'disconnected');
+            this.isConnected = false;
             this.eventSource.close();
             
             // Exponential backoff for reconnection
@@ -268,41 +277,78 @@ class CollaborativeCalendar {
             setTimeout(() => this.connectSSE(), delay);
         };
         
+        // FIXED: Add duplicate prevention for SSE events
         this.eventSource.addEventListener('create', (e) => {
             const eventData = JSON.parse(e.data);
-            this.addEventToCalendar(eventData);
-            this.lastEventId = parseInt(e.lastEventId);
+            const eventId = `create-${eventData.id}`;
+            
+            if (!this.processedEventIds.has(eventId)) {
+                this.processedEventIds.add(eventId);
+                console.log('SSE: Creating event', eventData.id);
+                this.addEventToCalendar(eventData);
+                this.lastEventId = parseInt(e.lastEventId) || this.lastEventId;
+                
+                // Clean up processed IDs after 5 minutes
+                setTimeout(() => this.processedEventIds.delete(eventId), 300000);
+            } else {
+                console.log('SSE: Skipping duplicate create event', eventData.id);
+            }
         });
         
         this.eventSource.addEventListener('update', (e) => {
             const eventData = JSON.parse(e.data);
-            this.updateEventInCalendar(eventData);
-            this.lastEventId = parseInt(e.lastEventId);
+            const eventId = `update-${eventData.id}-${e.lastEventId}`;
+            
+            if (!this.processedEventIds.has(eventId)) {
+                this.processedEventIds.add(eventId);
+                console.log('SSE: Updating event', eventData.id);
+                this.updateEventInCalendar(eventData);
+                this.lastEventId = parseInt(e.lastEventId) || this.lastEventId;
+                
+                // Clean up processed IDs after 5 minutes
+                setTimeout(() => this.processedEventIds.delete(eventId), 300000);
+            } else {
+                console.log('SSE: Skipping duplicate update event', eventData.id);
+            }
         });
         
         this.eventSource.addEventListener('delete', (e) => {
             const eventData = JSON.parse(e.data);
-            this.removeEventFromCalendar(eventData.id);
-            this.lastEventId = parseInt(e.lastEventId);
+            const eventId = `delete-${eventData.id}`;
+            
+            if (!this.processedEventIds.has(eventId)) {
+                this.processedEventIds.add(eventId);
+                console.log('SSE: Deleting event', eventData.id);
+                this.removeEventFromCalendar(eventData.id);
+                this.lastEventId = parseInt(e.lastEventId) || this.lastEventId;
+                
+                // Clean up processed IDs after 5 minutes
+                setTimeout(() => this.processedEventIds.delete(eventId), 300000);
+            } else {
+                console.log('SSE: Skipping duplicate delete event', eventData.id);
+            }
         });
         
         this.eventSource.addEventListener('user_created', (e) => {
             // Refresh users list when a new user is created
+            console.log('SSE: User created, refreshing users list');
             this.loadUsers();
-            this.lastEventId = parseInt(e.lastEventId);
+            this.lastEventId = parseInt(e.lastEventId) || this.lastEventId;
         });
         
         this.eventSource.addEventListener('heartbeat', (e) => {
-            // Keep connection alive
+            // Keep connection alive - don't log this as it's too frequent
             this.lastEventId = parseInt(e.lastEventId) || this.lastEventId;
         });
         
         this.eventSource.addEventListener('reconnect', (e) => {
+            console.log('SSE: Server requested reconnect');
             this.lastEventId = parseInt(e.lastEventId) || this.lastEventId;
             this.connectSSE(); // Graceful reconnect
         });
         
         this.eventSource.addEventListener('timeout', () => {
+            console.log('SSE: Connection timeout, reconnecting');
             this.connectSSE(); // Reconnect on timeout
         });
     }
@@ -422,6 +468,8 @@ class CollaborativeCalendar {
             const response = await fetch(`${this.apiEndpoints.api}?action=events&user_ids=${userIds}`);
             const events = await response.json();
             
+            console.log('Loading events for users:', userIds, 'Found:', events.length, 'events');
+            
             // Clear and add events
             this.calendar.removeAllEvents();
             events.forEach(event => {
@@ -430,6 +478,14 @@ class CollaborativeCalendar {
         } catch (error) {
             console.error('Error loading events:', error);
         }
+    }
+    
+    // FIXED: Debounced event processing to prevent excessive API calls
+    debounceEventProcessing(callback, delay = 100) {
+        if (this.eventProcessingTimeout) {
+            clearTimeout(this.eventProcessingTimeout);
+        }
+        this.eventProcessingTimeout = setTimeout(callback, delay);
     }
     
     // NEW: Validate if user can edit event before allowing drag/drop
@@ -552,19 +608,22 @@ class CollaborativeCalendar {
             return;
         }
         
-        try {
-            await this.updateEvent({
-                id: event.id,
-                title: event.title,
-                start: event.startStr,
-                end: event.endStr || event.startStr
-            });
-            console.log('Event move saved successfully');
-        } catch (error) {
-            console.error('Error saving moved event:', error);
-            info.revert();
-            alert('Error saving event move. Changes reverted.');
-        }
+        // FIXED: Debounce the update to prevent excessive API calls
+        this.debounceEventProcessing(async () => {
+            try {
+                await this.updateEvent({
+                    id: event.id,
+                    title: event.title,
+                    start: event.startStr,
+                    end: event.endStr || event.startStr
+                });
+                console.log('Event move saved successfully');
+            } catch (error) {
+                console.error('Error saving moved event:', error);
+                info.revert();
+                alert('Error saving event move. Changes reverted.');
+            }
+        });
     }
     
     async handleEventResize(info) {
@@ -586,19 +645,22 @@ class CollaborativeCalendar {
             return;
         }
         
-        try {
-            await this.updateEvent({
-                id: event.id,
-                title: event.title,
-                start: event.startStr,
-                end: event.endStr || event.startStr
-            });
-            console.log('Event resize saved successfully');
-        } catch (error) {
-            console.error('Error saving resized event:', error);
-            info.revert();
-            alert('Error saving event resize. Changes reverted.');
-        }
+        // FIXED: Debounce the update to prevent excessive API calls
+        this.debounceEventProcessing(async () => {
+            try {
+                await this.updateEvent({
+                    id: event.id,
+                    title: event.title,
+                    start: event.startStr,
+                    end: event.endStr || event.startStr
+                });
+                console.log('Event resize saved successfully');
+            } catch (error) {
+                console.error('Error saving resized event:', error);
+                info.revert();
+                alert('Error saving event resize. Changes reverted.');
+            }
+        });
     }
     
     openEventModal(eventData = {}) {
@@ -860,6 +922,6 @@ class CollaborativeCalendar {
 
 // Initialize the calendar when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
-    console.log('Initializing Collaborative Calendar with xdsoft datetimepicker...');
+    console.log('Initializing Collaborative Calendar with fixes for duplicate events...');
     new CollaborativeCalendar();
 });
