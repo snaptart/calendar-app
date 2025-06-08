@@ -1,9 +1,10 @@
 <?php
 /**
- * Complete Enhanced API Controller with Events Management
+ * API Controller with Import Proxy - Routes import requests to worker
  * Location: backend/api.php
  * 
- * This replaces your existing api.php file with full events management support
+ * This version maintains the same frontend interface while routing
+ * import functionality to the dedicated worker
  */
 
 // Set proper error handling to prevent HTML output
@@ -27,7 +28,6 @@ try {
     require_once 'models/User.php';
     require_once 'models/Event.php';
     require_once 'models/CalendarUpdate.php';
-    require_once 'models/EventImport.php';
 } catch (Exception $e) {
     // Clean any output buffer and send error
     ob_clean();
@@ -43,7 +43,6 @@ try {
     $calendarUpdate = new CalendarUpdate($pdo);
     $userModel = new User($pdo, $calendarUpdate);
     $eventModel = new Event($pdo, $calendarUpdate);
-    $eventImport = new EventImport($pdo, $calendarUpdate, $userModel, $eventModel);
     $auth = new Auth($pdo);
 
     // Initialize calendar updates system
@@ -136,33 +135,162 @@ function validateRequiredFields($input, $requiredFields) {
 }
 
 /**
- * Handle file upload validation
+ * Proxy import requests to the import worker
  */
-function handleFileUpload() {
+function proxyToImportWorker($auth) {
+    // Verify authentication first
+    $currentUser = $auth->requireAuth();
+    
+    // Build the URL to the import worker
+    $workerUrl = $_SERVER['REQUEST_SCHEME'] . '://' . $_SERVER['HTTP_HOST'] . 
+                 dirname($_SERVER['SCRIPT_NAME']) . '/workers/import.php';
+    
+    // Prepare the request to forward
+    $postFields = $_POST;
+    $files = $_FILES;
+    
+    // Create a new cURL request to the worker
+    $ch = curl_init();
+    
+    // Prepare multipart form data
+    $postData = [];
+    
+    // Add regular POST fields
+    foreach ($postFields as $key => $value) {
+        $postData[$key] = $value;
+    }
+    
+    // Add files
+    foreach ($files as $fieldName => $fileInfo) {
+        if ($fileInfo['error'] === UPLOAD_ERR_OK) {
+            $postData[$fieldName] = new CURLFile(
+                $fileInfo['tmp_name'], 
+                $fileInfo['type'], 
+                $fileInfo['name']
+            );
+        }
+    }
+    
+    curl_setopt_array($ch, [
+        CURLOPT_URL => $workerUrl,
+        CURLOPT_POST => true,
+        CURLOPT_POSTFIELDS => $postData,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_FOLLOWLOCATION => true,
+        CURLOPT_TIMEOUT => 30,
+        CURLOPT_HTTPHEADER => [
+            'User-Agent: ' . ($_SERVER['HTTP_USER_AGENT'] ?? 'Calendar-API-Proxy/1.0')
+        ],
+        // Forward cookies for authentication
+        CURLOPT_COOKIE => $_SERVER['HTTP_COOKIE'] ?? '',
+        CURLOPT_SSL_VERIFYPEER => false, // For local development
+        CURLOPT_SSL_VERIFYHOST => false  // For local development
+    ]);
+    
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $error = curl_error($ch);
+    
+    curl_close($ch);
+    
+    if ($error) {
+        error_log("cURL Error when proxying to import worker: " . $error);
+        throw new Exception('Failed to communicate with import service');
+    }
+    
+    // Clean any output buffer
+    if (ob_get_level()) {
+        ob_clean();
+    }
+    
+    // Set the same status code as the worker response
+    http_response_code($httpCode);
+    
+    // Return the worker's response directly
+    echo $response;
+    exit();
+}
+
+/**
+ * Simple proxy using include (alternative method)
+ */
+function includeImportWorker($auth) {
+    // Verify authentication first
+    $currentUser = $auth->requireAuth();
+    
+    // Clean current output buffer
+    if (ob_get_level()) {
+        ob_clean();
+    }
+    
+    // Store current working directory
+    $originalDir = getcwd();
+    
+    try {
+        // Change to workers directory to make relative includes work
+        chdir(__DIR__ . '/workers');
+        
+        // Include the import worker which will handle the request
+        include 'import.php';
+        
+    } finally {
+        // Restore original directory
+        chdir($originalDir);
+    }
+    
+    exit();
+}
+
+/**
+ * Detect if this is an import request
+ */
+function isImportRequest() {
     $contentType = $_SERVER['CONTENT_TYPE'] ?? '';
     
-    if (strpos($contentType, 'multipart/form-data') === false) {
-        throw new Exception('Invalid content type for file upload');
+    // Check for multipart form data (file upload)
+    if (strpos($contentType, 'multipart/form-data') !== false) {
+        return true;
     }
     
-    $maxFileSize = 5 * 1024 * 1024; // 5MB
-    $uploadedSize = $_SERVER['CONTENT_LENGTH'] ?? 0;
-    
-    if ($uploadedSize > $maxFileSize) {
-        throw new Exception('File size exceeds maximum allowed size of 5MB');
+    // Check for import actions in POST data
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        $action = $_POST['action'] ?? '';
+        $importActions = ['validate_import_file', 'import_events', 'preview_import', 'import_formats'];
+        
+        if (in_array($action, $importActions)) {
+            return true;
+        }
     }
     
-    return true;
+    // Check for import actions in GET data
+    if ($_SERVER['REQUEST_METHOD'] === 'GET') {
+        $action = $_GET['action'] ?? '';
+        $importActions = ['import_formats', 'import_stats', 'supported_import_formats'];
+        
+        if (in_array($action, $importActions)) {
+            return true;
+        }
+    }
+    
+    return false;
 }
 
 // Route the request
-handleRequest(function() use ($pdo, $method, $auth, $userModel, $eventModel, $calendarUpdate, $eventImport) {
+handleRequest(function() use ($pdo, $method, $auth, $userModel, $eventModel, $calendarUpdate) {
+    
+    // Check if this is an import request and proxy it
+    if (isImportRequest()) {
+        // Use the include method (simpler and more reliable for local development)
+        includeImportWorker($auth);
+        return;
+    }
+    
     switch ($method) {
         case 'GET':
-            handleGetRequest($auth, $userModel, $eventModel, $calendarUpdate, $eventImport);
+            handleGetRequest($auth, $userModel, $eventModel, $calendarUpdate);
             break;
         case 'POST':
-            handlePostRequest($auth, $userModel, $eventModel, $calendarUpdate, $eventImport);
+            handlePostRequest($auth, $userModel, $eventModel, $calendarUpdate);
             break;
         case 'PUT':
             handlePutRequest($auth, $eventModel);
@@ -179,7 +307,7 @@ handleRequest(function() use ($pdo, $method, $auth, $userModel, $eventModel, $ca
 /**
  * Handle GET requests
  */
-function handleGetRequest($auth, $userModel, $eventModel, $calendarUpdate, $eventImport) {
+function handleGetRequest($auth, $userModel, $eventModel, $calendarUpdate) {
     $action = $_GET['action'] ?? '';
     
     switch ($action) {
@@ -320,61 +448,6 @@ function handleGetRequest($auth, $userModel, $eventModel, $calendarUpdate, $even
             sendResponse(['latest_id' => $latestId]);
             break;
             
-        // Import-related GET endpoints
-        case 'import_stats':
-            $currentUser = $auth->requireAuth();
-            
-            $userId = $_GET['user_id'] ?? $currentUser['id'];
-            if ($userId != $currentUser['id']) {
-                throw new Exception('You can only view your own import statistics');
-            }
-            
-            $stats = $eventImport->getImportStats($userId);
-            sendResponse($stats);
-            break;
-            
-        case 'supported_import_formats':
-            $auth->requireAuth();
-            
-            sendResponse([
-                'formats' => [
-                    'json' => [
-                        'name' => 'JSON',
-                        'extensions' => ['.json'],
-                        'description' => 'JavaScript Object Notation format',
-                        'sample' => [
-                            'title' => 'Sample Event',
-                            'start' => '2025-06-15 10:00:00',
-                            'end' => '2025-06-15 11:00:00',
-                            'user_name' => 'John Doe'
-                        ]
-                    ],
-                    'csv' => [
-                        'name' => 'CSV',
-                        'extensions' => ['.csv', '.txt'],
-                        'description' => 'Comma-separated values format',
-                        'sample_headers' => 'title,start,end,user_name,description'
-                    ],
-                    'ics' => [
-                        'name' => 'ICS/iCal',
-                        'extensions' => ['.ics', '.ical'],
-                        'description' => 'iCalendar format'
-                    ]
-                ],
-                'limits' => [
-                    'max_file_size' => '5MB',
-                    'max_events' => 20
-                ],
-                'requirements' => [
-                    'title' => 'Required - Event title',
-                    'start' => 'Required - Start date/time (future dates only)',
-                    'end' => 'Optional - End date/time (defaults to start time)',
-                    'user_name' => 'Required - Must match existing user name',
-                    'description' => 'Optional - Event description'
-                ]
-            ]);
-            break;
-            
         case 'database_stats':
             $auth->requireAuth();
             
@@ -393,8 +466,22 @@ function handleGetRequest($auth, $userModel, $eventModel, $calendarUpdate, $even
                 'message' => 'API is working',
                 'timestamp' => time(),
                 'authenticated' => $isAuthenticated,
-                'version' => '2.0'
+                'version' => '2.2',
+                'features' => [
+                    'event_management' => true,
+                    'user_management' => true,
+                    'real_time_updates' => true,
+                    'import_functionality' => 'proxied_to_worker'
+                ]
             ]);
+            break;
+            
+        // Import-related GET actions are handled by the proxy detection above
+        case 'import_formats':
+        case 'import_stats':
+        case 'supported_import_formats':
+            // These should be caught by isImportRequest() and proxied
+            throw new Exception('Import request not properly routed to worker');
             break;
             
         default:
@@ -405,61 +492,10 @@ function handleGetRequest($auth, $userModel, $eventModel, $calendarUpdate, $even
 /**
  * Handle POST requests
  */
-function handlePostRequest($auth, $userModel, $eventModel, $calendarUpdate, $eventImport) {
-    // Check if this is a file upload request
-    $contentType = $_SERVER['CONTENT_TYPE'] ?? '';
+function handlePostRequest($auth, $userModel, $eventModel, $calendarUpdate) {
+    // Import requests should be caught by the proxy detection
+    // This function handles regular JSON API requests only
     
-    if (strpos($contentType, 'multipart/form-data') !== false) {
-        // Handle file upload requests
-        handleFileUpload();
-        
-        $action = $_POST['action'] ?? '';
-        
-        switch ($action) {
-            case 'validate_import_file':
-                $currentUser = $auth->requireAuth();
-                
-                if (!isset($_FILES['import_file'])) {
-                    throw new Exception('No file uploaded');
-                }
-                
-                $validation = $eventImport->validateImportFile($_FILES['import_file']);
-                sendResponse($validation);
-                break;
-                
-            case 'import_events':
-                $currentUser = $auth->requireAuth();
-                
-                if (!isset($_FILES['import_file'])) {
-                    throw new Exception('No file uploaded');
-                }
-                
-                $importResult = $eventImport->importEvents($_FILES['import_file'], $currentUser['id']);
-                
-                // Add import notification
-                if ($importResult['imported_count'] > 0) {
-                    $calendarUpdate->broadcastNotification(
-                        "{$currentUser['name']} imported {$importResult['imported_count']} events",
-                        'info',
-                        [
-                            'import_user' => $currentUser['name'],
-                            'imported_count' => $importResult['imported_count'],
-                            'error_count' => $importResult['error_count']
-                        ]
-                    );
-                }
-                
-                sendResponse($importResult, 201);
-                break;
-                
-            default:
-                throw new Exception('Invalid action for file upload');
-        }
-        
-        return;
-    }
-    
-    // Handle regular JSON requests
     $input = getJsonInput();
     $action = $input['action'] ?? '';
     
@@ -575,6 +611,13 @@ function handlePostRequest($auth, $userModel, $eventModel, $calendarUpdate, $eve
             
             $updatedUser = $userModel->updateUser($currentUser['id'], $updateData);
             sendResponse($updatedUser);
+            break;
+            
+        // Import-related actions should be caught by proxy detection
+        case 'import_events':
+        case 'validate_import_file':
+        case 'preview_import':
+            throw new Exception('Import request not properly detected. Please ensure you are uploading a file.');
             break;
             
         default:
