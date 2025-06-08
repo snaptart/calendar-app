@@ -1,13 +1,18 @@
 <?php
-// REST API for calendar operations
-// Save as: api.php
+/**
+ * REST API for calendar operations
+ * Location: backend/api.php
+ * 
+ * Handles all CRUD operations for the collaborative calendar application.
+ * Supports GET, POST, PUT, and DELETE methods for events and users.
+ */
 
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE');
 header('Access-Control-Allow-Headers: Content-Type');
 
-require_once 'config.php';
+require_once 'database/config.php';
 
 $method = $_SERVER['REQUEST_METHOD'];
 

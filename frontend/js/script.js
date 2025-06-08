@@ -1,5 +1,5 @@
 // Frontend JavaScript for collaborative calendar with xdsoft datetimepicker
-// Save as: script.js
+// Location: frontend/js/script.js
 
 class CollaborativeCalendar {
     constructor() {
@@ -12,6 +12,12 @@ class CollaborativeCalendar {
         this.currentEvent = null;
         this.lastEventId = 0;
         this.reconnectAttempts = 0;
+        
+        // API endpoints - relative to frontend location
+        this.apiEndpoints = {
+            api: '../../backend/api.php',
+            sse: '../../backend/workers/sse.php'
+        };
         
         this.init();
     }
@@ -243,7 +249,7 @@ class CollaborativeCalendar {
         
         this.updateConnectionStatus('Connecting...');
         
-        this.eventSource = new EventSource(`sse.php?lastEventId=${this.lastEventId}`);
+        this.eventSource = new EventSource(`${this.apiEndpoints.sse}?lastEventId=${this.lastEventId}`);
         
         this.eventSource.onopen = () => {
             this.updateConnectionStatus('Connected', 'connected');
@@ -303,7 +309,7 @@ class CollaborativeCalendar {
     
     async loadUsers() {
         try {
-            const response = await fetch('api.php?action=users');
+            const response = await fetch(`${this.apiEndpoints.api}?action=users`);
             const users = await response.json();
             this.allUsers = users;
             this.renderUserCheckboxes();
@@ -370,7 +376,7 @@ class CollaborativeCalendar {
         
         try {
             // Create or get user from database
-            const response = await fetch('api.php', {
+            const response = await fetch(this.apiEndpoints.api, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -413,7 +419,7 @@ class CollaborativeCalendar {
         
         try {
             const userIds = Array.from(this.selectedUsers).join(',');
-            const response = await fetch(`api.php?action=events&user_ids=${userIds}`);
+            const response = await fetch(`${this.apiEndpoints.api}?action=events&user_ids=${userIds}`);
             const events = await response.json();
             
             // Clear and add events
@@ -702,7 +708,7 @@ class CollaborativeCalendar {
     async createEvent(eventData) {
         console.log('Creating event:', eventData);
         
-        const response = await fetch('api.php', {
+        const response = await fetch(this.apiEndpoints.api, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -723,7 +729,7 @@ class CollaborativeCalendar {
     async updateEvent(eventData) {
         console.log('Updating event:', eventData);
         
-        const response = await fetch('api.php', {
+        const response = await fetch(this.apiEndpoints.api, {
             method: 'PUT',
             headers: {
                 'Content-Type': 'application/json'
@@ -749,7 +755,7 @@ class CollaborativeCalendar {
         try {
             console.log('Deleting event:', this.currentEvent.id);
             
-            const response = await fetch(`api.php?id=${this.currentEvent.id}`, {
+            const response = await fetch(`${this.apiEndpoints.api}?id=${this.currentEvent.id}`, {
                 method: 'DELETE'
             });
             

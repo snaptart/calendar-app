@@ -1,7 +1,13 @@
 <?php
-// Database configuration
-// Save as: config.php
+/**
+ * Database configuration and helper functions
+ * Location: backend/database/config.php
+ * 
+ * This file handles database connection and provides helper functions
+ * for user management and real-time update broadcasting.
+ */
 
+// Database configuration
 $host = 'localhost';
 $dbname = 'collaborative_calendar';
 $username = 'root'; // Change to your MySQL username
@@ -18,7 +24,14 @@ try {
     die(json_encode(['error' => 'Database connection failed. Please check your configuration.']));
 }
 
-// Helper function to get or create user
+/**
+ * Helper function to get or create user
+ * 
+ * @param PDO $pdo Database connection
+ * @param string $name User name
+ * @return array User data
+ * @throws PDOException
+ */
 function getOrCreateUser($pdo, $name) {
     try {
         // Check if user exists
@@ -48,7 +61,13 @@ function getOrCreateUser($pdo, $name) {
     }
 }
 
-// Helper function to broadcast update
+/**
+ * Helper function to broadcast update via SSE
+ * 
+ * @param PDO $pdo Database connection
+ * @param string $eventType Type of event (create, update, delete)
+ * @param array $eventData Event data to broadcast
+ */
 function broadcastUpdate($pdo, $eventType, $eventData) {
     try {
         $stmt = $pdo->prepare("INSERT INTO calendar_updates (event_type, event_data) VALUES (?, ?)");
@@ -64,7 +83,12 @@ function broadcastUpdate($pdo, $eventType, $eventData) {
     }
 }
 
-// Test database connection
+/**
+ * Test database connection
+ * 
+ * @param PDO $pdo Database connection
+ * @return bool True if connection is working
+ */
 function testDatabaseConnection($pdo) {
     try {
         $stmt = $pdo->query("SELECT 1");
@@ -73,5 +97,47 @@ function testDatabaseConnection($pdo) {
         error_log("Database test failed: " . $e->getMessage());
         return false;
     }
+}
+
+/**
+ * Initialize database tables if they don't exist
+ * This is a safety function for development environments
+ */
+function initializeDatabaseTables($pdo) {
+    try {
+        // Check if tables exist
+        $stmt = $pdo->query("SHOW TABLES LIKE 'users'");
+        if (!$stmt->fetch()) {
+            throw new Exception("Database tables not found. Please import the SQL schema from documentation/calendar-app.sql");
+        }
+        
+        $stmt = $pdo->query("SHOW TABLES LIKE 'events'");
+        if (!$stmt->fetch()) {
+            throw new Exception("Database tables not found. Please import the SQL schema from documentation/calendar-app.sql");
+        }
+        
+        $stmt = $pdo->query("SHOW TABLES LIKE 'calendar_updates'");
+        if (!$stmt->fetch()) {
+            throw new Exception("Database tables not found. Please import the SQL schema from documentation/calendar-app.sql");
+        }
+        
+        return true;
+    } catch (Exception $e) {
+        error_log("Database initialization check failed: " . $e->getMessage());
+        return false;
+    }
+}
+
+// Perform basic database validation
+if (!testDatabaseConnection($pdo)) {
+    error_log("Database connection test failed");
+    die(json_encode(['error' => 'Database connection test failed']));
+}
+
+// Optional: Check if tables exist (useful for development)
+if (!initializeDatabaseTables($pdo)) {
+    error_log("Database tables validation failed");
+    // Note: We don't die here to allow the application to continue running
+    // The error will be logged for debugging purposes
 }
 ?>
