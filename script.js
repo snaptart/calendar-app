@@ -4,12 +4,13 @@
 class CollaborativeCalendar {
     constructor() {
         this.calendar = null;
-        this.pollInterval = null;
+        this.eventSource = null;
         this.currentUser = '';
         this.selectedUsers = new Set();
         this.allUsers = [];
         this.currentEvent = null;
         this.lastEventId = 0;
+        this.reconnectAttempts = 0;
         
         this.init();
     }
@@ -17,7 +18,7 @@ class CollaborativeCalendar {
     init() {
         this.initializeCalendar();
         this.setupEventListeners();
-        this.setupPolling();
+        this.setupSSE();
         this.loadUsers();
     }
     
@@ -97,62 +98,67 @@ class CollaborativeCalendar {
         });
     }
     
-    setupPolling() {
-        this.startPolling();
+    setupSSE() {
+        this.connectSSE();
     }
     
-    startPolling() {
-        this.updateConnectionStatus('Connected', 'connected');
+    connectSSE() {
+        if (this.eventSource) {
+            this.eventSource.close();
+        }
         
-        // Poll for updates every 3 seconds
-        this.pollInterval = setInterval(async () => {
-            try {
-                await this.checkForUpdates();
-            } catch (error) {
-                console.error('Polling error:', error);
-                this.updateConnectionStatus('Connection Error', 'disconnected');
-            }
-        }, 3000);
+        this.updateConnectionStatus('Connecting...');
         
-        // Initial check
-        this.checkForUpdates();
-    }
-    
-    async checkForUpdates() {
-        try {
-            const response = await fetch(`api.php?action=updates&lastId=${this.lastEventId}`);
-            const updates = await response.json();
+        this.eventSource = new EventSource(`sse.php?lastEventId=${this.lastEventId}`);
+        
+        this.eventSource.onopen = () => {
+            this.updateConnectionStatus('Connected', 'connected');
+            this.reconnectAttempts = 0; // Reset on successful connection
+        };
+        
+        this.eventSource.onerror = () => {
+            this.updateConnectionStatus('Disconnected', 'disconnected');
+            this.eventSource.close();
             
-            if (Array.isArray(updates)) {
-                updates.forEach(update => {
-                    this.handleUpdate(update);
-                    this.lastEventId = Math.max(this.lastEventId, update.id);
-                });
-                
-                if (updates.length > 0) {
-                    this.updateConnectionStatus('Connected', 'connected');
-                }
-            }
-        } catch (error) {
-            this.updateConnectionStatus('Connection Error', 'disconnected');
-            throw error;
-        }
-    }
-    
-    handleUpdate(update) {
-        const eventData = JSON.parse(update.event_data);
+            // Exponential backoff for reconnection
+            this.reconnectAttempts = (this.reconnectAttempts || 0) + 1;
+            const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 30000); // Max 30 seconds
+            
+            console.log(`SSE connection failed. Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts})`);
+            setTimeout(() => this.connectSSE(), delay);
+        };
         
-        switch (update.event_type) {
-            case 'create':
-                this.addEventToCalendar(eventData);
-                break;
-            case 'update':
-                this.updateEventInCalendar(eventData);
-                break;
-            case 'delete':
-                this.removeEventFromCalendar(eventData.id);
-                break;
-        }
+        this.eventSource.addEventListener('create', (e) => {
+            const eventData = JSON.parse(e.data);
+            this.addEventToCalendar(eventData);
+            this.lastEventId = parseInt(e.lastEventId);
+        });
+        
+        this.eventSource.addEventListener('update', (e) => {
+            const eventData = JSON.parse(e.data);
+            this.updateEventInCalendar(eventData);
+            this.lastEventId = parseInt(e.lastEventId);
+        });
+        
+        this.eventSource.addEventListener('delete', (e) => {
+            const eventData = JSON.parse(e.data);
+            this.removeEventFromCalendar(eventData.id);
+            this.lastEventId = parseInt(e.lastEventId);
+        });
+        
+        this.eventSource.addEventListener('heartbeat', (e) => {
+            // Keep connection alive
+            this.lastEventId = parseInt(e.lastEventId) || this.lastEventId;
+        });
+        
+        this.eventSource.addEventListener('reconnect', (e) => {
+            this.lastEventId = parseInt(e.lastEventId) || this.lastEventId;
+            this.connectSSE(); // Graceful reconnect
+        });
+        
+        this.eventSource.addEventListener('timeout', () => {
+            this.connectSSE(); // Reconnect on timeout
+        });
     }
     
     async loadUsers() {

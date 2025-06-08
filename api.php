@@ -46,14 +46,6 @@ function handleGet($pdo) {
     $action = $_GET['action'] ?? '';
     
     switch ($action) {
-        case 'updates':
-            $lastId = $_GET['lastId'] ?? 0;
-            $stmt = $pdo->prepare("SELECT * FROM calendar_updates WHERE id > ? ORDER BY id ASC LIMIT 10");
-            $stmt->execute([$lastId]);
-            $updates = $stmt->fetchAll();
-            echo json_encode($updates);
-            break;
-            
         case 'users':
             $stmt = $pdo->query("SELECT * FROM users ORDER BY name");
             echo json_encode($stmt->fetchAll());
