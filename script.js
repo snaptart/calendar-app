@@ -38,6 +38,7 @@ class CollaborativeCalendar {
             editable: true,
             selectable: true,
             selectMirror: true,
+            snapDuration: '00:05:00',
             
             // Enable event interaction
             eventStartEditable: true,
