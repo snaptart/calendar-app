@@ -388,20 +388,18 @@ class ConfigService {
         ];
     }
     
-    /**
-     * Create a configuration helper for layouts
-     */
-    public function forLayout($page, $extraConfig = []) {
-        $config = $this->getPageConfig($page, $extraConfig);
-        
-        // Add configuration JavaScript
-        $configJs = $this->generateConfigJs();
-        if (isset($config['js'])) {
-            $config['js'][] = 'data:text/javascript;base64,' . base64_encode($configJs);
-        }
-        
-        return $config;
-    }
+	/**
+	* Create a configuration helper for layouts
+	*/
+	public function forLayout($page, $extraConfig = [])
+	{
+		$config = $this->getPageConfig($page, $extraConfig);
+
+		// Store config JS separately for layouts to use
+		$config['configJs'] = $this->generateConfigJs();
+
+		return $config;
+	}
     
     /**
      * Get singleton instance
@@ -414,22 +412,5 @@ class ConfigService {
         return self::$instance;
     }
     
-    /**
-     * Static helper methods
-     */
-    public static function get($key, $default = null) {
-        return self::getInstance()->get($key, $default);
-    }
-    
-    public static function getAssetUrl($path) {
-        return self::getInstance()->getAssetUrl($path);
-    }
-    
-    public static function getPageConfig($page, $extraConfig = []) {
-        return self::getInstance()->getPageConfig($page, $extraConfig);
-    }
-    
-    public static function forLayout($page, $extraConfig = []) {
-        return self::getInstance()->forLayout($page, $extraConfig);
-    }
+
 }
