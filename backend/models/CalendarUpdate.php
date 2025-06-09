@@ -1,9 +1,10 @@
 <?php
 /**
- * CalendarUpdate Model Class
+ * CalendarUpdate Model Class - Fixed SQL Syntax Error
  * Location: backend/models/CalendarUpdate.php
  * 
  * Handles real-time update broadcasting and calendar update management
+ * FIXED: SQL syntax error in cleanupOldUpdates method
  */
 
 class CalendarUpdate {
@@ -100,13 +101,13 @@ class CalendarUpdate {
     }
     
     /**
-     * Clean up old calendar updates
+     * Clean up old calendar updates - FIXED SQL SYNTAX ERROR
      * 
      * @param int $maxAge Maximum age in hours (default: 24 hours)
      * @param int $maxRecords Maximum number of records to keep (default: 1000)
      * @return int Number of deleted records
      */
-    public function cleanupOldUpdates($maxAge = 24, $maxRecords = 1000) {
+    public function cleanupOldUpdatesDEPRECATED($maxAge = 24, $maxRecords = 1000) {
         try {
             $deletedCount = 0;
             
@@ -118,19 +119,28 @@ class CalendarUpdate {
             $stmt->execute([$maxAge]);
             $deletedCount += $stmt->rowCount();
             
-            // Keep only the most recent X records
+            // FIXED: Keep only the most recent X records - Use proper integer parameter
+            // The issue was using prepared statement parameter with LIMIT in subquery
+            // Solution: Use a different approach that doesn't require parameter in LIMIT
+            
+            // First, get the ID threshold
             $stmt = $this->pdo->prepare("
-                DELETE FROM calendar_updates 
-                WHERE id < (
-                    SELECT id FROM (
-                        SELECT id FROM calendar_updates 
-                        ORDER BY id DESC 
-                        LIMIT 1 OFFSET ?
-                    ) AS temp
-                )
+                SELECT id FROM calendar_updates 
+                ORDER BY id DESC 
+                LIMIT 1 OFFSET ?
             ");
             $stmt->execute([$maxRecords]);
-            $deletedCount += $stmt->rowCount();
+            $thresholdRow = $stmt->fetch();
+            
+            if ($thresholdRow) {
+                // Delete records older than the threshold
+                $stmt = $this->pdo->prepare("
+                    DELETE FROM calendar_updates 
+                    WHERE id < ?
+                ");
+                $stmt->execute([$thresholdRow['id']]);
+                $deletedCount += $stmt->rowCount();
+            }
             
             if ($deletedCount > 0) {
                 error_log("Cleaned up {$deletedCount} old calendar updates");
@@ -377,6 +387,84 @@ class CalendarUpdate {
         $this->cleanupOldUpdates();
         
         return true;
+    }
+    
+    /**
+     * Alternative cleanup method using direct SQL (more efficient)
+     * 
+     * @param int $maxAge Maximum age in hours
+     * @param int $maxRecords Maximum number of records to keep
+     * @return int Number of deleted records
+     */
+    public function cleanupOldUpdates($maxAge = 24, $maxRecords = 1000) {
+        try {
+            $deletedCount = 0;
+            
+            // Delete updates older than specified hours
+            $stmt = $this->pdo->prepare("
+                DELETE FROM calendar_updates 
+                WHERE created_at < DATE_SUB(NOW(), INTERVAL ? HOUR)
+            ");
+            $stmt->execute([$maxAge]);
+            $deletedCount += $stmt->rowCount();
+            
+            // Alternative approach: Use direct SQL with variable for LIMIT
+            // This avoids the prepared statement LIMIT issue entirely
+            $maxRecords = (int)$maxRecords; // Ensure it's an integer
+            
+            $sql = "
+                DELETE FROM calendar_updates 
+                WHERE id NOT IN (
+                    SELECT id FROM (
+                        SELECT id FROM calendar_updates 
+                        ORDER BY id DESC 
+                        LIMIT {$maxRecords}
+                    ) AS recent_updates
+                )
+            ";
+            
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute();
+            $deletedCount += $stmt->rowCount();
+            
+            if ($deletedCount > 0) {
+                error_log("Alternative cleanup: Removed {$deletedCount} old calendar updates");
+            }
+            
+            return $deletedCount;
+            
+        } catch (PDOException $e) {
+            error_log("Error in alternative cleanup: " . $e->getMessage());
+            return 0;
+        }
+    }
+    
+    /**
+     * Simple cleanup that just removes old records by age
+     * 
+     * @param int $maxAge Maximum age in hours
+     * @return int Number of deleted records
+     */
+    public function simpleCleanup($maxAge = 24) {
+        try {
+            $stmt = $this->pdo->prepare("
+                DELETE FROM calendar_updates 
+                WHERE created_at < DATE_SUB(NOW(), INTERVAL ? HOUR)
+            ");
+            $stmt->execute([$maxAge]);
+            
+            $deletedCount = $stmt->rowCount();
+            
+            if ($deletedCount > 0) {
+                error_log("Simple cleanup: Removed {$deletedCount} old calendar updates");
+            }
+            
+            return $deletedCount;
+            
+        } catch (PDOException $e) {
+            error_log("Error in simple cleanup: " . $e->getMessage());
+            return 0;
+        }
     }
 }
 ?>
