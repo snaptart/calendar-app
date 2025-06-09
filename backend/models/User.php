@@ -4,6 +4,7 @@
  * Location: backend/models/User.php
  * 
  * Updated to work with the itmdev database schema
+ * FIXED: Line 27 - Changed $pdo to $this->pdo
  */
 
 class User {
@@ -22,7 +23,7 @@ class User {
      */
     public function getAllUsers() {
         try {
-            $stmt = $pdo->query("
+            $stmt = $this->pdo->query("
                 SELECT 
                     u.user_ID as id, 
                     u.user_Name as name, 
