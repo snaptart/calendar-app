@@ -1,9 +1,9 @@
 <?php
 /**
- * Authentication Class for Collaborative Calendar
+ * Authentication Class for itmdev
  * Location: backend/auth/Auth.php
  * 
- * Handles user authentication, registration, and session management
+ * Updated to work with itmdev user and session tables
  */
 
 require_once __DIR__ . '/Session.php';
@@ -34,32 +34,45 @@ class Auth {
             }
             
             // Check if user already exists
-            $stmt = $this->pdo->prepare("SELECT id FROM users WHERE email = ?");
+            $stmt = $this->pdo->prepare("SELECT user_ID FROM user WHERE user_Email = ? AND user_Status = 'Active'");
             $stmt->execute([$email]);
             if ($stmt->fetch()) {
                 return ['success' => false, 'error' => 'An account with this email already exists'];
             }
             
             // Check if name is already taken
-            $stmt = $this->pdo->prepare("SELECT id FROM users WHERE name = ?");
+            $stmt = $this->pdo->prepare("SELECT user_ID FROM user WHERE user_Name = ? AND user_Status = 'Active'");
             $stmt->execute([$name]);
             if ($stmt->fetch()) {
                 return ['success' => false, 'error' => 'This name is already taken. Please choose a different name.'];
             }
             
-            // Generate user color
-            $colors = ['#e74c3c', '#2ecc71', '#f39c12', '#9b59b6', '#1abc9c', '#34495e', '#e67e22', '#3498db'];
-            $color = $colors[array_rand($colors)];
+            // Get default role ID for Calendar User
+            $stmt = $this->pdo->prepare("SELECT role_ID FROM role WHERE role_Name = 'Calendar User'");
+            $stmt->execute();
+            $role = $stmt->fetch();
+            
+            if (!$role) {
+                // Create default Calendar User role
+                $stmt = $this->pdo->prepare("
+                    INSERT INTO role (role_Name, role_Desc, role_Level, role_Entity, created_by) 
+                    VALUES ('Calendar User', 'Default calendar user role', 10, 'calendar', 'system')
+                ");
+                $stmt->execute();
+                $roleId = $this->pdo->lastInsertId();
+            } else {
+                $roleId = $role['role_ID'];
+            }
             
             // Hash password
             $passwordHash = password_hash($password, PASSWORD_DEFAULT);
             
             // Insert new user
             $stmt = $this->pdo->prepare("
-                INSERT INTO users (name, email, password_hash, color) 
-                VALUES (?, ?, ?, ?)
+                INSERT INTO user (role_ID, user_Name, user_Email, password, user_Status, created_by) 
+                VALUES (?, ?, ?, ?, 'Active', 'calendar_system')
             ");
-            $stmt->execute([$name, $email, $passwordHash, $color]);
+            $stmt->execute([$roleId, $name, $email, $passwordHash]);
             
             $userId = $this->pdo->lastInsertId();
             
@@ -70,7 +83,7 @@ class Auth {
                     'id' => $userId,
                     'name' => $name,
                     'email' => $email,
-                    'color' => $color
+                    'color' => '#3498db' // Default color for compatibility
                 ]
             ];
             
@@ -79,9 +92,9 @@ class Auth {
             
             // Check for duplicate key errors
             if ($e->getCode() == 23000) {
-                if (strpos($e->getMessage(), 'email') !== false) {
+                if (strpos($e->getMessage(), 'user_Email') !== false) {
                     return ['success' => false, 'error' => 'An account with this email already exists'];
-                } elseif (strpos($e->getMessage(), 'name') !== false) {
+                } elseif (strpos($e->getMessage(), 'user_Name') !== false) {
                     return ['success' => false, 'error' => 'This name is already taken'];
                 }
             }
@@ -107,9 +120,9 @@ class Auth {
             
             // Find user by email
             $stmt = $this->pdo->prepare("
-                SELECT id, name, email, password_hash, color, last_login 
-                FROM users 
-                WHERE email = ?
+                SELECT user_ID, user_Name, user_Email, password, user_Last_Login 
+                FROM user 
+                WHERE user_Email = ? AND user_Status = 'Active'
             ");
             $stmt->execute([$email]);
             $user = $stmt->fetch();
@@ -119,16 +132,16 @@ class Auth {
             }
             
             // Verify password
-            if (!password_verify($password, $user['password_hash'])) {
+            if (!password_verify($password, $user['password'])) {
                 return ['success' => false, 'error' => 'Invalid email or password'];
             }
             
             // Update last login
-            $stmt = $this->pdo->prepare("UPDATE users SET last_login = NOW() WHERE id = ?");
-            $stmt->execute([$user['id']]);
+            $stmt = $this->pdo->prepare("UPDATE user SET user_Last_Login = NOW() WHERE user_ID = ?");
+            $stmt->execute([$user['user_ID']]);
             
             // Create session
-            $sessionId = $this->session->create($user['id'], $rememberMe);
+            $sessionId = $this->session->create($user['user_ID'], $rememberMe);
             
             // Set session cookie
             $this->setSessionCookie($sessionId, $rememberMe);
@@ -137,10 +150,10 @@ class Auth {
                 'success' => true,
                 'message' => 'Login successful',
                 'user' => [
-                    'id' => $user['id'],
-                    'name' => $user['name'],
-                    'email' => $user['email'],
-                    'color' => $user['color']
+                    'id' => $user['user_ID'],
+                    'name' => $user['user_Name'],
+                    'email' => $user['user_Email'],
+                    'color' => '#3498db' // Default color for compatibility
                 ]
             ];
             
@@ -177,7 +190,7 @@ class Auth {
                     'id' => $user['id'],
                     'name' => $user['name'],
                     'email' => $user['email'],
-                    'color' => $user['color']
+                    'color' => '#3498db' // Default color for compatibility
                 ]
             ];
             
@@ -223,7 +236,7 @@ class Auth {
     /**
      * Middleware to require authentication
      * 
-     * @return array|null User data if authenticated, null if not
+     * @return array User data if authenticated, null if not
      */
     public function requireAuth() {
         $auth = $this->checkAuth();

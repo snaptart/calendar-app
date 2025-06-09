@@ -1,10 +1,9 @@
 <?php
 /**
- * CalendarUpdate Model Class - Fixed SQL Syntax Error
+ * CalendarUpdate Model Class for itmdev
  * Location: backend/models/CalendarUpdate.php
  * 
- * Handles real-time update broadcasting and calendar update management
- * FIXED: SQL syntax error in cleanupOldUpdates method
+ * Updated to use event_updates table instead of calendar_updates
  */
 
 class CalendarUpdate {
@@ -33,8 +32,8 @@ class CalendarUpdate {
             // Add to recent broadcasts tracking
             $this->trackBroadcast($eventType, $eventData);
             
-            // Insert the update into database
-            $stmt = $this->pdo->prepare("INSERT INTO calendar_updates (event_type, event_data) VALUES (?, ?)");
+            // Insert the update into event_updates table
+            $stmt = $this->pdo->prepare("INSERT INTO event_updates (event_type, event_data) VALUES (?, ?)");
             $stmt->execute([$eventType, json_encode($eventData)]);
             
             error_log("Broadcast update: {$eventType} for event ID " . ($eventData['id'] ?? 'N/A'));
@@ -60,7 +59,7 @@ class CalendarUpdate {
     public function getUpdates($lastId = 0, $limit = 10) {
         try {
             $stmt = $this->pdo->prepare("
-                SELECT * FROM calendar_updates 
+                SELECT * FROM event_updates 
                 WHERE id > ? 
                 ORDER BY id ASC 
                 LIMIT ?
@@ -92,7 +91,7 @@ class CalendarUpdate {
      */
     public function getLatestUpdateId() {
         try {
-            $stmt = $this->pdo->query("SELECT MAX(id) FROM calendar_updates");
+            $stmt = $this->pdo->query("SELECT MAX(id) FROM event_updates");
             return (int)$stmt->fetchColumn();
         } catch (PDOException $e) {
             error_log("Error fetching latest update ID: " . $e->getMessage());
@@ -101,55 +100,50 @@ class CalendarUpdate {
     }
     
     /**
-     * Clean up old calendar updates - FIXED SQL SYNTAX ERROR
+     * Clean up old calendar updates
      * 
      * @param int $maxAge Maximum age in hours (default: 24 hours)
      * @param int $maxRecords Maximum number of records to keep (default: 1000)
      * @return int Number of deleted records
      */
-    public function cleanupOldUpdatesDEPRECATED($maxAge = 24, $maxRecords = 1000) {
+    public function cleanupOldUpdates($maxAge = 24, $maxRecords = 1000) {
         try {
             $deletedCount = 0;
             
             // Delete updates older than specified hours
             $stmt = $this->pdo->prepare("
-                DELETE FROM calendar_updates 
+                DELETE FROM event_updates 
                 WHERE created_at < DATE_SUB(NOW(), INTERVAL ? HOUR)
             ");
             $stmt->execute([$maxAge]);
             $deletedCount += $stmt->rowCount();
             
-            // FIXED: Keep only the most recent X records - Use proper integer parameter
-            // The issue was using prepared statement parameter with LIMIT in subquery
-            // Solution: Use a different approach that doesn't require parameter in LIMIT
+            // Keep only the most recent X records using direct SQL
+            $maxRecords = (int)$maxRecords; // Ensure it's an integer
             
-            // First, get the ID threshold
-            $stmt = $this->pdo->prepare("
-                SELECT id FROM calendar_updates 
-                ORDER BY id DESC 
-                LIMIT 1 OFFSET ?
-            ");
-            $stmt->execute([$maxRecords]);
-            $thresholdRow = $stmt->fetch();
+            $sql = "
+                DELETE FROM event_updates 
+                WHERE id NOT IN (
+                    SELECT id FROM (
+                        SELECT id FROM event_updates 
+                        ORDER BY id DESC 
+                        LIMIT {$maxRecords}
+                    ) AS recent_updates
+                )
+            ";
             
-            if ($thresholdRow) {
-                // Delete records older than the threshold
-                $stmt = $this->pdo->prepare("
-                    DELETE FROM calendar_updates 
-                    WHERE id < ?
-                ");
-                $stmt->execute([$thresholdRow['id']]);
-                $deletedCount += $stmt->rowCount();
-            }
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute();
+            $deletedCount += $stmt->rowCount();
             
             if ($deletedCount > 0) {
-                error_log("Cleaned up {$deletedCount} old calendar updates");
+                error_log("Cleaned up {$deletedCount} old event updates");
             }
             
             return $deletedCount;
             
         } catch (PDOException $e) {
-            error_log("Error cleaning up calendar updates: " . $e->getMessage());
+            error_log("Error cleaning up event updates: " . $e->getMessage());
             return 0;
         }
     }
@@ -161,15 +155,15 @@ class CalendarUpdate {
      */
     public function clearAllUpdates() {
         try {
-            $stmt = $this->pdo->query("DELETE FROM calendar_updates");
+            $stmt = $this->pdo->query("DELETE FROM event_updates");
             $deletedCount = $stmt->rowCount();
             
-            error_log("Cleared all calendar updates: {$deletedCount} records");
+            error_log("Cleared all event updates: {$deletedCount} records");
             
             return $deletedCount;
             
         } catch (PDOException $e) {
-            error_log("Error clearing calendar updates: " . $e->getMessage());
+            error_log("Error clearing event updates: " . $e->getMessage());
             return 0;
         }
     }
@@ -189,7 +183,7 @@ class CalendarUpdate {
                     COUNT(CASE WHEN event_type = 'delete' THEN 1 END) as delete_updates,
                     MIN(created_at) as oldest_update,
                     MAX(created_at) as newest_update
-                FROM calendar_updates
+                FROM event_updates
             ");
             
             return $stmt->fetch();
@@ -217,7 +211,7 @@ class CalendarUpdate {
     public function getEventUpdates($eventId, $limit = 10) {
         try {
             $stmt = $this->pdo->prepare("
-                SELECT * FROM calendar_updates 
+                SELECT * FROM event_updates 
                 WHERE JSON_EXTRACT(event_data, '$.id') = ?
                 ORDER BY id DESC 
                 LIMIT ?
@@ -330,13 +324,13 @@ class CalendarUpdate {
     }
     
     /**
-     * Check if the calendar_updates table exists
+     * Check if the event_updates table exists
      * 
      * @return bool True if table exists, false otherwise
      */
     public function tableExists() {
         try {
-            $stmt = $this->pdo->query("SHOW TABLES LIKE 'calendar_updates'");
+            $stmt = $this->pdo->query("SHOW TABLES LIKE 'event_updates'");
             return $stmt->fetch() !== false;
         } catch (PDOException $e) {
             error_log("Error checking table existence: " . $e->getMessage());
@@ -345,14 +339,14 @@ class CalendarUpdate {
     }
     
     /**
-     * Create the calendar_updates table if it doesn't exist
+     * Create the event_updates table if it doesn't exist
      * 
      * @return bool Success status
      */
     public function createTable() {
         try {
             $sql = "
-                CREATE TABLE IF NOT EXISTS calendar_updates (
+                CREATE TABLE IF NOT EXISTS event_updates (
                     id INT(11) NOT NULL AUTO_INCREMENT,
                     event_type VARCHAR(50) NOT NULL,
                     event_data TEXT NOT NULL,
@@ -363,12 +357,12 @@ class CalendarUpdate {
             ";
             
             $this->pdo->exec($sql);
-            error_log("Calendar updates table created successfully");
+            error_log("Event updates table created successfully");
             
             return true;
             
         } catch (PDOException $e) {
-            error_log("Error creating calendar_updates table: " . $e->getMessage());
+            error_log("Error creating event_updates table: " . $e->getMessage());
             return false;
         }
     }
@@ -390,56 +384,6 @@ class CalendarUpdate {
     }
     
     /**
-     * Alternative cleanup method using direct SQL (more efficient)
-     * 
-     * @param int $maxAge Maximum age in hours
-     * @param int $maxRecords Maximum number of records to keep
-     * @return int Number of deleted records
-     */
-    public function cleanupOldUpdates($maxAge = 24, $maxRecords = 1000) {
-        try {
-            $deletedCount = 0;
-            
-            // Delete updates older than specified hours
-            $stmt = $this->pdo->prepare("
-                DELETE FROM calendar_updates 
-                WHERE created_at < DATE_SUB(NOW(), INTERVAL ? HOUR)
-            ");
-            $stmt->execute([$maxAge]);
-            $deletedCount += $stmt->rowCount();
-            
-            // Alternative approach: Use direct SQL with variable for LIMIT
-            // This avoids the prepared statement LIMIT issue entirely
-            $maxRecords = (int)$maxRecords; // Ensure it's an integer
-            
-            $sql = "
-                DELETE FROM calendar_updates 
-                WHERE id NOT IN (
-                    SELECT id FROM (
-                        SELECT id FROM calendar_updates 
-                        ORDER BY id DESC 
-                        LIMIT {$maxRecords}
-                    ) AS recent_updates
-                )
-            ";
-            
-            $stmt = $this->pdo->prepare($sql);
-            $stmt->execute();
-            $deletedCount += $stmt->rowCount();
-            
-            if ($deletedCount > 0) {
-                error_log("Alternative cleanup: Removed {$deletedCount} old calendar updates");
-            }
-            
-            return $deletedCount;
-            
-        } catch (PDOException $e) {
-            error_log("Error in alternative cleanup: " . $e->getMessage());
-            return 0;
-        }
-    }
-    
-    /**
      * Simple cleanup that just removes old records by age
      * 
      * @param int $maxAge Maximum age in hours
@@ -448,7 +392,7 @@ class CalendarUpdate {
     public function simpleCleanup($maxAge = 24) {
         try {
             $stmt = $this->pdo->prepare("
-                DELETE FROM calendar_updates 
+                DELETE FROM event_updates 
                 WHERE created_at < DATE_SUB(NOW(), INTERVAL ? HOUR)
             ");
             $stmt->execute([$maxAge]);
@@ -456,7 +400,7 @@ class CalendarUpdate {
             $deletedCount = $stmt->rowCount();
             
             if ($deletedCount > 0) {
-                error_log("Simple cleanup: Removed {$deletedCount} old calendar updates");
+                error_log("Simple cleanup: Removed {$deletedCount} old event updates");
             }
             
             return $deletedCount;

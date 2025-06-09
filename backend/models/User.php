@@ -1,9 +1,9 @@
 <?php
 /**
- * Improved User Model Class with Better Statistics
+ * User Model Class for itmdev
  * Location: backend/models/User.php
  * 
- * Enhanced version that ensures accurate data retrieval and formatting
+ * Updated to work with the itmdev database schema
  */
 
 class User {
@@ -22,10 +22,19 @@ class User {
      */
     public function getAllUsers() {
         try {
-            $stmt = $this->pdo->query("
-                SELECT id, name, email, color, created_at, last_login 
-                FROM users 
-                ORDER BY name ASC
+            $stmt = $pdo->query("
+                SELECT 
+                    u.user_ID as id, 
+                    u.user_Name as name, 
+                    u.user_Email as email, 
+                    '#3498db' as color,  -- Default color for compatibility
+                    u.create_ts as created_at, 
+                    u.user_Last_Login as last_login,
+                    r.role_Name as role_name
+                FROM user u
+                LEFT JOIN role r ON u.role_ID = r.role_ID
+                WHERE u.user_Status = 'Active'
+                ORDER BY u.user_Name ASC
             ");
             return $stmt->fetchAll();
         } catch (PDOException $e) {
@@ -44,57 +53,61 @@ class User {
             // First get all users
             $stmt = $this->pdo->query("
                 SELECT
-                    u.id,
-                    u.name,
-                    u.email,
-                    u.color,
-                    u.created_at,
-                    u.last_login,
-                    u.password_hash
-                FROM users u
-                ORDER BY u.name ASC
+                    u.user_ID,
+                    u.user_Name,
+                    u.user_Email,
+                    u.create_ts,
+                    u.user_Last_Login,
+                    u.password,
+                    r.role_Name
+                FROM user u
+                LEFT JOIN role r ON u.role_ID = r.role_ID
+                WHERE u.user_Status = 'Active'
+                ORDER BY u.user_Name ASC
             ");
             
             $users = $stmt->fetchAll();
             
-            // Then get event counts for each user
+            // Then get event counts for each user from episode table
             $eventCountsQuery = $this->pdo->query("
                 SELECT 
-                    user_id,
+                    user_ID,
                     COUNT(*) as event_count,
-                    COUNT(CASE WHEN start_datetime >= NOW() THEN 1 END) as upcoming_events,
-                    COUNT(CASE WHEN start_datetime < NOW() THEN 1 END) as past_events,
-                    MIN(start_datetime) as first_event_date,
-                    MAX(start_datetime) as last_event_date
-                FROM events 
-                GROUP BY user_id
+                    COUNT(CASE WHEN episode_Start_Date_Time >= NOW() THEN 1 END) as upcoming_events,
+                    COUNT(CASE WHEN episode_Start_Date_Time < NOW() THEN 1 END) as past_events,
+                    MIN(episode_Start_Date_Time) as first_event_date,
+                    MAX(episode_Start_Date_Time) as last_event_date
+                FROM episode 
+                WHERE user_ID IS NOT NULL
+                GROUP BY user_ID
             ");
             
             $eventCounts = [];
             while ($row = $eventCountsQuery->fetch()) {
-                $eventCounts[$row['user_id']] = $row;
+                $eventCounts[$row['user_ID']] = $row;
             }
             
             // Format the data for frontend consumption
             return array_map(function($user) use ($eventCounts) {
-                $userId = (int)$user['id'];
+                $userId = (int)$user['user_ID'];
                 $eventStats = $eventCounts[$userId] ?? null;
                 
                 return [
                     'id' => $userId,
-                    'name' => $user['name'] ?: 'Unknown User',
-                    'email' => $user['email'] ?: null,
-                    'color' => $user['color'] ?: '#3498db',
-                    'created_at' => $user['created_at'],
-                    'last_login' => $user['last_login'],
+                    'name' => $user['user_Name'] ?: 'Unknown User',
+                    'email' => $user['user_Email'] ?: null,
+                    'color' => '#3498db', // Default color for compatibility
+                    'created_at' => $user['create_ts'],
+                    'last_login' => $user['user_Last_Login'],
                     'event_count' => $eventStats ? (int)$eventStats['event_count'] : 0,
                     'upcoming_events' => $eventStats ? (int)$eventStats['upcoming_events'] : 0,
                     'past_events' => $eventStats ? (int)$eventStats['past_events'] : 0,
                     'first_event_date' => $eventStats ? $eventStats['first_event_date'] : null,
                     'last_event_date' => $eventStats ? $eventStats['last_event_date'] : null,
-                    'status' => $this->determineUserStatus($user['last_login'], $user['password_hash']),
-                    'has_password' => !empty($user['password_hash']),
-                    'member_since' => $this->formatMemberSince($user['created_at'])
+                    'status' => $this->determineUserStatus($user['user_Last_Login'], $user['password']),
+                    'has_password' => !empty($user['password']),
+                    'member_since' => $this->formatMemberSince($user['create_ts']),
+                    'role_name' => $user['role_Name'] ?? 'Unknown'
                 ];
             }, $users);
             
@@ -114,9 +127,11 @@ class User {
         try {
             // Get user info
             $stmt = $this->pdo->prepare("
-                SELECT id, name, email, color, created_at, last_login, password_hash
-                FROM users 
-                WHERE id = ?
+                SELECT u.user_ID, u.user_Name, u.user_Email, u.create_ts, 
+                       u.user_Last_Login, u.password, r.role_Name
+                FROM user u
+                LEFT JOIN role r ON u.role_ID = r.role_ID
+                WHERE u.user_ID = ? AND u.user_Status = 'Active'
             ");
             $stmt->execute([$userId]);
             $user = $stmt->fetch();
@@ -125,41 +140,44 @@ class User {
                 return null;
             }
             
-            // Get event statistics
+            // Get event statistics from episode table
             $stmt = $this->pdo->prepare("
                 SELECT 
                     COUNT(*) as total_events,
-                    COUNT(CASE WHEN start_datetime >= NOW() THEN 1 END) as upcoming_events,
-                    COUNT(CASE WHEN start_datetime < NOW() THEN 1 END) as past_events,
-                    MIN(start_datetime) as first_event,
-                    MAX(start_datetime) as latest_event,
-                    AVG(TIMESTAMPDIFF(MINUTE, start_datetime, end_datetime)) as avg_event_duration
-                FROM events 
-                WHERE user_id = ?
+                    COUNT(CASE WHEN episode_Start_Date_Time >= NOW() THEN 1 END) as upcoming_events,
+                    COUNT(CASE WHEN episode_Start_Date_Time < NOW() THEN 1 END) as past_events,
+                    MIN(episode_Start_Date_Time) as first_event,
+                    MAX(episode_Start_Date_Time) as latest_event,
+                    AVG(episode_Duration) as avg_event_duration
+                FROM episode 
+                WHERE user_ID = ?
             ");
             $stmt->execute([$userId]);
             $stats = $stmt->fetch();
             
             // Get recent events
             $stmt = $this->pdo->prepare("
-                SELECT id, title, start_datetime, end_datetime
-                FROM events 
-                WHERE user_id = ? 
-                ORDER BY start_datetime DESC 
+                SELECT e.episode_ID as id, e.episode_Title as title, 
+                       e.episode_Start_Date_Time as start_datetime, 
+                       e.episode_End_Date_Time as end_datetime
+                FROM episode e
+                WHERE e.user_ID = ? 
+                ORDER BY e.episode_Start_Date_Time DESC 
                 LIMIT 5
             ");
             $stmt->execute([$userId]);
             $recentEvents = $stmt->fetchAll();
             
             return [
-                'id' => (int)$user['id'],
-                'name' => $user['name'],
-                'email' => $user['email'],
-                'color' => $user['color'],
-                'created_at' => $user['created_at'],
-                'last_login' => $user['last_login'],
-                'status' => $this->determineUserStatus($user['last_login'], $user['password_hash']),
-                'has_password' => !empty($user['password_hash']),
+                'id' => (int)$user['user_ID'],
+                'name' => $user['user_Name'],
+                'email' => $user['user_Email'],
+                'color' => '#3498db', // Default color
+                'created_at' => $user['create_ts'],
+                'last_login' => $user['user_Last_Login'],
+                'status' => $this->determineUserStatus($user['user_Last_Login'], $user['password']),
+                'has_password' => !empty($user['password']),
+                'role_name' => $user['role_Name'],
                 'statistics' => [
                     'total_events' => (int)$stats['total_events'],
                     'upcoming_events' => (int)$stats['upcoming_events'],
@@ -186,9 +204,11 @@ class User {
     public function getUserById($userId) {
         try {
             $stmt = $this->pdo->prepare("
-                SELECT id, name, email, color, created_at, last_login 
-                FROM users 
-                WHERE id = ?
+                SELECT u.user_ID as id, u.user_Name as name, u.user_Email as email, 
+                       u.create_ts as created_at, u.user_Last_Login as last_login,
+                       '#3498db' as color
+                FROM user u
+                WHERE u.user_ID = ? AND u.user_Status = 'Active'
             ");
             $stmt->execute([$userId]);
             return $stmt->fetch();
@@ -207,9 +227,11 @@ class User {
     public function getUserByName($name) {
         try {
             $stmt = $this->pdo->prepare("
-                SELECT id, name, email, color, created_at, last_login 
-                FROM users 
-                WHERE name = ?
+                SELECT u.user_ID as id, u.user_Name as name, u.user_Email as email, 
+                       u.create_ts as created_at, u.user_Last_Login as last_login,
+                       '#3498db' as color
+                FROM user u
+                WHERE u.user_Name = ? AND u.user_Status = 'Active'
             ");
             $stmt->execute([$name]);
             return $stmt->fetch();
@@ -227,7 +249,12 @@ class User {
      */
     public function getUserByEmail($email) {
         try {
-            $stmt = $this->pdo->prepare("SELECT * FROM users WHERE email = ?");
+            $stmt = $this->pdo->prepare("
+                SELECT u.*, r.role_Name 
+                FROM user u
+                LEFT JOIN role r ON u.role_ID = r.role_ID
+                WHERE u.user_Email = ? AND u.user_Status = 'Active'
+            ");
             $stmt->execute([$email]);
             return $stmt->fetch();
         } catch (PDOException $e) {
@@ -242,7 +269,7 @@ class User {
      * @param string $name User name
      * @param string $email User email (optional)
      * @param string $passwordHash Password hash (optional)
-     * @param string $color User color (optional)
+     * @param string $color User color (optional, ignored in itmdev)
      * @return array Created user data
      */
     public function createUser($name, $email = null, $passwordHash = null, $color = null) {
@@ -269,18 +296,34 @@ class User {
                 throw new Exception('An account with this email already exists');
             }
             
-            // Generate random color if not provided
-            if (!$color) {
-                $colors = ['#e74c3c', '#2ecc71', '#f39c12', '#9b59b6', '#1abc9c', '#34495e', '#e67e22', '#3498db'];
-                $color = $colors[array_rand($colors)];
+            // Get default role ID for Calendar User
+            $stmt = $this->pdo->prepare("SELECT role_ID FROM role WHERE role_Name = 'Calendar User'");
+            $stmt->execute();
+            $role = $stmt->fetch();
+            
+            if (!$role) {
+                // Create default Calendar User role
+                $stmt = $this->pdo->prepare("
+                    INSERT INTO role (role_Name, role_Desc, role_Level, role_Entity, created_by) 
+                    VALUES ('Calendar User', 'Default calendar user role', 10, 'calendar', 'system')
+                ");
+                $stmt->execute();
+                $roleId = $this->pdo->lastInsertId();
+            } else {
+                $roleId = $role['role_ID'];
+            }
+            
+            // Generate unique email if not provided
+            if (!$email) {
+                $email = strtolower(str_replace(' ', '.', $name)) . '@example.com';
             }
             
             // Insert new user
             $stmt = $this->pdo->prepare("
-                INSERT INTO users (name, email, password_hash, color) 
-                VALUES (?, ?, ?, ?)
+                INSERT INTO user (role_ID, user_Name, user_Email, password, user_Status, created_by) 
+                VALUES (?, ?, ?, ?, 'Active', 'calendar_system')
             ");
-            $stmt->execute([$name, $email, $passwordHash, $color]);
+            $stmt->execute([$roleId, $name, $email, $passwordHash ?: '']);
             
             $userId = $this->pdo->lastInsertId();
             
@@ -288,7 +331,7 @@ class User {
                 'id' => $userId,
                 'name' => $name,
                 'email' => $email,
-                'color' => $color,
+                'color' => '#3498db', // Default color for compatibility
                 'created_at' => date('Y-m-d H:i:s')
             ];
             
@@ -297,9 +340,9 @@ class User {
             
             // Check for duplicate key errors
             if ($e->getCode() == 23000) {
-                if (strpos($e->getMessage(), 'email') !== false) {
+                if (strpos($e->getMessage(), 'user_Email') !== false) {
                     throw new Exception('An account with this email already exists');
-                } elseif (strpos($e->getMessage(), 'name') !== false) {
+                } elseif (strpos($e->getMessage(), 'user_Name') !== false) {
                     throw new Exception('This name is already taken');
                 }
             }
@@ -317,14 +360,15 @@ class User {
      */
     public function updateUser($userId, $data) {
         try {
-            $allowedFields = ['name', 'email', 'color'];
+            $allowedFields = ['user_Name', 'user_Email'];
             $updateFields = [];
             $updateValues = [];
             
             foreach ($allowedFields as $field) {
-                if (isset($data[$field])) {
+                $apiField = ($field === 'user_Name') ? 'name' : 'email';
+                if (isset($data[$apiField])) {
                     $updateFields[] = "$field = ?";
-                    $updateValues[] = $data[$field];
+                    $updateValues[] = $data[$apiField];
                 }
             }
             
@@ -332,12 +376,14 @@ class User {
                 throw new Exception('No valid fields to update');
             }
             
+            $updateFields[] = "updated_by = ?";
+            $updateValues[] = 'calendar_system';
             $updateValues[] = $userId;
             
             $stmt = $this->pdo->prepare("
-                UPDATE users 
+                UPDATE user 
                 SET " . implode(', ', $updateFields) . " 
-                WHERE id = ?
+                WHERE user_ID = ? AND user_Status = 'Active'
             ");
             $stmt->execute($updateValues);
             
@@ -361,7 +407,7 @@ class User {
      */
     public function updateLastLogin($userId) {
         try {
-            $stmt = $this->pdo->prepare("UPDATE users SET last_login = NOW() WHERE id = ?");
+            $stmt = $this->pdo->prepare("UPDATE user SET user_Last_Login = NOW() WHERE user_ID = ?");
             $stmt->execute([$userId]);
             return $stmt->rowCount() > 0;
         } catch (PDOException $e) {
@@ -382,10 +428,12 @@ class User {
             $searchTerm = "%{$query}%";
             
             $stmt = $this->pdo->prepare("
-                SELECT id, name, email, color, created_at 
-                FROM users 
-                WHERE name LIKE ? OR email LIKE ?
-                ORDER BY name 
+                SELECT u.user_ID as id, u.user_Name as name, u.user_Email as email, 
+                       u.create_ts as created_at, '#3498db' as color
+                FROM user u
+                WHERE (u.user_Name LIKE ? OR u.user_Email LIKE ?) 
+                  AND u.user_Status = 'Active'
+                ORDER BY u.user_Name 
                 LIMIT ?
             ");
             $stmt->execute([$searchTerm, $searchTerm, $limit]);
@@ -404,7 +452,7 @@ class User {
      */
     public function getUserCount() {
         try {
-            $stmt = $this->pdo->query("SELECT COUNT(*) FROM users");
+            $stmt = $this->pdo->query("SELECT COUNT(*) FROM user WHERE user_Status = 'Active'");
             return (int)$stmt->fetchColumn();
         } catch (PDOException $e) {
             error_log("Error getting user count: " . $e->getMessage());
@@ -422,12 +470,13 @@ class User {
         try {
             $stmt = $this->pdo->prepare("
                 SELECT 
-                    COUNT(DISTINCT u.id) as total_users,
-                    COUNT(DISTINCT CASE WHEN u.last_login >= DATE_SUB(NOW(), INTERVAL ? DAY) THEN u.id END) as active_users,
-                    COUNT(DISTINCT CASE WHEN u.created_at >= DATE_SUB(NOW(), INTERVAL ? DAY) THEN u.id END) as new_users,
-                    COUNT(DISTINCT CASE WHEN e.created_at >= DATE_SUB(NOW(), INTERVAL ? DAY) THEN e.user_id END) as users_with_events
-                FROM users u
-                LEFT JOIN events e ON u.id = e.user_id
+                    COUNT(DISTINCT u.user_ID) as total_users,
+                    COUNT(DISTINCT CASE WHEN u.user_Last_Login >= DATE_SUB(NOW(), INTERVAL ? DAY) THEN u.user_ID END) as active_users,
+                    COUNT(DISTINCT CASE WHEN u.create_ts >= DATE_SUB(NOW(), INTERVAL ? DAY) THEN u.user_ID END) as new_users,
+                    COUNT(DISTINCT CASE WHEN e.create_ts >= DATE_SUB(NOW(), INTERVAL ? DAY) THEN e.user_ID END) as users_with_events
+                FROM user u
+                LEFT JOIN episode e ON u.user_ID = e.user_ID
+                WHERE u.user_Status = 'Active'
             ");
             $stmt->execute([$days, $days, $days]);
             
@@ -442,12 +491,12 @@ class User {
      * Determine user status based on last login and account type
      * 
      * @param string|null $lastLogin Last login timestamp
-     * @param string|null $passwordHash Whether user has a password (registered vs guest)
+     * @param string|null $password Whether user has a password (registered vs guest)
      * @return string User status (active, inactive, new, guest)
      */
-    private function determineUserStatus($lastLogin, $passwordHash = null) {
-        // If no password hash, it's a guest user (legacy users without registration)
-        if (empty($passwordHash)) {
+    private function determineUserStatus($lastLogin, $password = null) {
+        // If no password, it's a guest user (legacy users without registration)
+        if (empty($password)) {
             return 'guest';
         }
         
@@ -510,7 +559,7 @@ class User {
      */
     public function userExistsByName($name) {
         try {
-            $stmt = $this->pdo->prepare("SELECT COUNT(*) FROM users WHERE name = ?");
+            $stmt = $this->pdo->prepare("SELECT COUNT(*) FROM user WHERE user_Name = ? AND user_Status = 'Active'");
             $stmt->execute([$name]);
             return $stmt->fetchColumn() > 0;
         } catch (PDOException $e) {
@@ -527,7 +576,7 @@ class User {
      */
     public function userExistsByEmail($email) {
         try {
-            $stmt = $this->pdo->prepare("SELECT COUNT(*) FROM users WHERE email = ?");
+            $stmt = $this->pdo->prepare("SELECT COUNT(*) FROM user WHERE user_Email = ? AND user_Status = 'Active'");
             $stmt->execute([$email]);
             return $stmt->fetchColumn() > 0;
         } catch (PDOException $e) {

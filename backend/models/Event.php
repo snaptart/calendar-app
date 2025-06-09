@@ -1,9 +1,9 @@
 <?php
 /**
- * Event Model Class
+ * Event Model Class for itmdev
  * Location: backend/models/Event.php
  * 
- * Handles all event-related business logic and database operations
+ * Updated to work with the itmdev database schema using event and episode tables
  */
 
 class Event {
@@ -32,19 +32,24 @@ class Event {
                 
                 $placeholders = str_repeat('?,', count($userIds) - 1) . '?';
                 $stmt = $this->pdo->prepare("
-                    SELECT e.*, u.name as user_name, u.color as user_color 
-                    FROM events e 
-                    JOIN users u ON e.user_id = u.id 
-                    WHERE e.user_id IN ($placeholders)
-                    ORDER BY e.start_datetime
+                    SELECT e.episode_ID, e.episode_Title, e.episode_Start_Date_Time, 
+                           e.episode_End_Date_Time, e.episode_Color, e.user_ID,
+                           u.user_Name as user_name
+                    FROM episode e 
+                    JOIN user u ON e.user_ID = u.user_ID 
+                    WHERE e.user_ID IN ($placeholders) AND u.user_Status = 'Active'
+                    ORDER BY e.episode_Start_Date_Time
                 ");
                 $stmt->execute($userIds);
             } else {
                 $stmt = $this->pdo->query("
-                    SELECT e.*, u.name as user_name, u.color as user_color 
-                    FROM events e 
-                    JOIN users u ON e.user_id = u.id 
-                    ORDER BY e.start_datetime
+                    SELECT e.episode_ID, e.episode_Title, e.episode_Start_Date_Time, 
+                           e.episode_End_Date_Time, e.episode_Color, e.user_ID,
+                           u.user_Name as user_name
+                    FROM episode e 
+                    JOIN user u ON e.user_ID = u.user_ID 
+                    WHERE u.user_Status = 'Active'
+                    ORDER BY e.episode_Start_Date_Time
                 ");
             }
             
@@ -70,24 +75,26 @@ class Event {
     public function getEventsByUserId($userId, $startDate = null, $endDate = null) {
         try {
             $sql = "
-                SELECT e.*, u.name as user_name, u.color as user_color 
-                FROM events e 
-                JOIN users u ON e.user_id = u.id 
-                WHERE e.user_id = ?
+                SELECT e.episode_ID, e.episode_Title, e.episode_Start_Date_Time, 
+                       e.episode_End_Date_Time, e.episode_Color, e.user_ID,
+                       u.user_Name as user_name
+                FROM episode e 
+                JOIN user u ON e.user_ID = u.user_ID 
+                WHERE e.user_ID = ? AND u.user_Status = 'Active'
             ";
             $params = [$userId];
             
             if ($startDate) {
-                $sql .= " AND e.start_datetime >= ?";
+                $sql .= " AND e.episode_Start_Date_Time >= ?";
                 $params[] = $startDate;
             }
             
             if ($endDate) {
-                $sql .= " AND e.start_datetime <= ?";
+                $sql .= " AND e.episode_Start_Date_Time <= ?";
                 $params[] = $endDate . ' 23:59:59';
             }
             
-            $sql .= " ORDER BY e.start_datetime";
+            $sql .= " ORDER BY e.episode_Start_Date_Time";
             
             $stmt = $this->pdo->prepare($sql);
             $stmt->execute($params);
@@ -106,16 +113,18 @@ class Event {
     /**
      * Get event by ID
      * 
-     * @param int $eventId Event ID
+     * @param int $eventId Event ID (episode_ID)
      * @return array|null Event data or null if not found
      */
     public function getEventById($eventId) {
         try {
             $stmt = $this->pdo->prepare("
-                SELECT e.*, u.name as user_name, u.color as user_color 
-                FROM events e 
-                JOIN users u ON e.user_id = u.id 
-                WHERE e.id = ?
+                SELECT e.episode_ID, e.episode_Title, e.episode_Start_Date_Time, 
+                       e.episode_End_Date_Time, e.episode_Color, e.user_ID,
+                       u.user_Name as user_name
+                FROM episode e 
+                JOIN user u ON e.user_ID = u.user_ID 
+                WHERE e.episode_ID = ? AND u.user_Status = 'Active'
             ");
             $stmt->execute([$eventId]);
             
@@ -144,38 +153,95 @@ class Event {
             // Validate input
             $this->validateEventData($title, $startDateTime, $endDateTime);
             
-            // If no end time provided, use start time
+            // If no end time provided, use start time + 1 hour default
             if (!$endDateTime) {
-                $endDateTime = $startDateTime;
+                $startDate = new DateTime($startDateTime);
+                $endDate = clone $startDate;
+                $endDate->add(new DateInterval('PT1H'));
+                $endDateTime = $endDate->format('Y-m-d H:i:s');
             }
             
             // Validate dates
             $this->validateEventDates($startDateTime, $endDateTime);
             
-            // Insert event
-            $stmt = $this->pdo->prepare("
-                INSERT INTO events (user_id, title, start_datetime, end_datetime) 
-                VALUES (?, ?, ?, ?)
-            ");
+            // Calculate duration in minutes
+            $start = new DateTime($startDateTime);
+            $end = new DateTime($endDateTime);
+            $duration = $end->diff($start)->i + ($end->diff($start)->h * 60);
             
-            $stmt->execute([
-                $userId,
-                trim($title),
-                $startDateTime,
-                $endDateTime
-            ]);
+            // Get default values for itmdev fields
+            $facilityId = $this->getDefaultFacilityId();
+            $programId = $this->getDefaultProgramId();
+            $teamId = $this->getDefaultTeamId($userId);
+            $resourceId = $this->getDefaultResourceId();
             
-            $eventId = $this->pdo->lastInsertId();
+            // Begin transaction to create both event and episode
+            $this->pdo->beginTransaction();
             
-            // Get the created event with user info
-            $createdEvent = $this->getEventById($eventId);
-            
-            // Broadcast update
-            if ($this->calendarUpdate && $createdEvent) {
-                $this->calendarUpdate->broadcastUpdate('create', $createdEvent);
+            try {
+                // First create the event record
+                $eventStmt = $this->pdo->prepare("
+                    INSERT INTO event (
+                        event_Type, event_Start_Date_Time, event_End_Date_Time, 
+                        event_Last_Date_Time, episode_Duration, created_by
+                    ) VALUES (?, ?, ?, ?, ?, ?)
+                ");
+                
+                $eventStmt->execute([
+                    'Calendar Event',
+                    $startDateTime,
+                    $endDateTime,
+                    $endDateTime,
+                    $duration,
+                    'calendar_system'
+                ]);
+                
+                $eventId = $this->pdo->lastInsertId();
+                
+                // Then create the episode record
+                $episodeStmt = $this->pdo->prepare("
+                    INSERT INTO episode (
+                        event_ID, resource_ID, facility_ID, program_ID, team_ID_new, 
+                        user_ID, episode_Start_Date_Time, episode_End_Date_Time, 
+                        episode_Duration, episode_Title, episode_Description, 
+                        episode_Color, created_by
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ");
+                
+                $episodeStmt->execute([
+                    $eventId,
+                    $resourceId,
+                    $facilityId,
+                    $programId,
+                    $teamId,
+                    $userId,
+                    $startDateTime,
+                    $endDateTime,
+                    $duration,
+                    trim($title),
+                    $additionalData['description'] ?? null,
+                    $additionalData['color'] ?? '#3498db',
+                    'calendar_system'
+                ]);
+                
+                $episodeId = $this->pdo->lastInsertId();
+                
+                $this->pdo->commit();
+                
+                // Get the created event with user info
+                $createdEvent = $this->getEventById($episodeId);
+                
+                // Broadcast update
+                if ($this->calendarUpdate && $createdEvent) {
+                    $this->calendarUpdate->broadcastUpdate('create', $createdEvent);
+                }
+                
+                return $createdEvent;
+                
+            } catch (Exception $e) {
+                $this->pdo->rollBack();
+                throw $e;
             }
-            
-            return $createdEvent;
             
         } catch (PDOException $e) {
             error_log("Error creating event: " . $e->getMessage());
@@ -186,7 +252,7 @@ class Event {
     /**
      * Update an event
      * 
-     * @param int $eventId Event ID
+     * @param int $eventId Event ID (episode_ID)
      * @param int $userId User ID (for ownership verification)
      * @param array $data Event data to update
      * @return array Updated event data
@@ -200,7 +266,7 @@ class Event {
                 throw new Exception('Event not found');
             }
             
-            if ($existingEvent['user_id'] != $userId) {
+            if ($existingEvent['user_ID'] != $userId) {
                 throw new Exception('You can only edit your own events');
             }
             
@@ -216,33 +282,71 @@ class Event {
                 $this->validateEventDates($data['start'], $data['end']);
             }
             
-            // Update event
-            $stmt = $this->pdo->prepare("
-                UPDATE events 
-                SET title = ?, start_datetime = ?, end_datetime = ? 
-                WHERE id = ?
-            ");
+            // Calculate new duration
+            $start = new DateTime($data['start']);
+            $end = new DateTime($data['end'] ?? $data['start']);
+            $duration = $end->diff($start)->i + ($end->diff($start)->h * 60);
             
-            $stmt->execute([
-                trim($data['title']),
-                $data['start'],
-                $data['end'] ?? $data['start'],
-                $eventId
-            ]);
+            // Begin transaction to update both event and episode
+            $this->pdo->beginTransaction();
             
-            if ($stmt->rowCount() === 0) {
-                throw new Exception('No changes made to the event');
+            try {
+                // Update episode record
+                $episodeStmt = $this->pdo->prepare("
+                    UPDATE episode 
+                    SET episode_Title = ?, episode_Start_Date_Time = ?, 
+                        episode_End_Date_Time = ?, episode_Duration = ?,
+                        updated_by = ?
+                    WHERE episode_ID = ?
+                ");
+                
+                $episodeStmt->execute([
+                    trim($data['title']),
+                    $data['start'],
+                    $data['end'] ?? $data['start'],
+                    $duration,
+                    'calendar_system',
+                    $eventId
+                ]);
+                
+                // Update corresponding event record
+                $eventStmt = $this->pdo->prepare("
+                    UPDATE event 
+                    SET event_Start_Date_Time = ?, event_End_Date_Time = ?, 
+                        event_Last_Date_Time = ?, episode_Duration = ?,
+                        updated_by = ?
+                    WHERE event_ID = ?
+                ");
+                
+                $eventStmt->execute([
+                    $data['start'],
+                    $data['end'] ?? $data['start'],
+                    $data['end'] ?? $data['start'],
+                    $duration,
+                    'calendar_system',
+                    $existingEvent['event_ID']
+                ]);
+                
+                $this->pdo->commit();
+                
+                if ($episodeStmt->rowCount() === 0) {
+                    throw new Exception('No changes made to the event');
+                }
+                
+                // Get updated event
+                $updatedEvent = $this->getEventById($eventId);
+                
+                // Broadcast update
+                if ($this->calendarUpdate && $updatedEvent) {
+                    $this->calendarUpdate->broadcastUpdate('update', $updatedEvent);
+                }
+                
+                return $updatedEvent;
+                
+            } catch (Exception $e) {
+                $this->pdo->rollBack();
+                throw $e;
             }
-            
-            // Get updated event
-            $updatedEvent = $this->getEventById($eventId);
-            
-            // Broadcast update
-            if ($this->calendarUpdate && $updatedEvent) {
-                $this->calendarUpdate->broadcastUpdate('update', $updatedEvent);
-            }
-            
-            return $updatedEvent;
             
         } catch (PDOException $e) {
             error_log("Error updating event: " . $e->getMessage());
@@ -253,7 +357,7 @@ class Event {
     /**
      * Delete an event
      * 
-     * @param int $eventId Event ID
+     * @param int $eventId Event ID (episode_ID)
      * @param int $userId User ID (for ownership verification)
      * @return bool Success status
      */
@@ -266,62 +370,46 @@ class Event {
                 throw new Exception('Event not found');
             }
             
-            if ($existingEvent['user_id'] != $userId) {
+            if ($existingEvent['user_ID'] != $userId) {
                 throw new Exception('You can only delete your own events');
             }
             
-            // Delete event
-            $stmt = $this->pdo->prepare("DELETE FROM events WHERE id = ?");
-            $stmt->execute([$eventId]);
+            // Begin transaction to delete both episode and event if no other episodes
+            $this->pdo->beginTransaction();
             
-            // Broadcast update
-            if ($this->calendarUpdate) {
-                $this->calendarUpdate->broadcastUpdate('delete', ['id' => $eventId]);
+            try {
+                // Delete episode
+                $episodeStmt = $this->pdo->prepare("DELETE FROM episode WHERE episode_ID = ?");
+                $episodeStmt->execute([$eventId]);
+                
+                // Check if this was the last episode for this event
+                $checkStmt = $this->pdo->prepare("SELECT COUNT(*) FROM episode WHERE event_ID = ?");
+                $checkStmt->execute([$existingEvent['event_ID']]);
+                $episodeCount = $checkStmt->fetchColumn();
+                
+                // If no more episodes, delete the event record too
+                if ($episodeCount == 0) {
+                    $eventStmt = $this->pdo->prepare("DELETE FROM event WHERE event_ID = ?");
+                    $eventStmt->execute([$existingEvent['event_ID']]);
+                }
+                
+                $this->pdo->commit();
+                
+                // Broadcast update
+                if ($this->calendarUpdate) {
+                    $this->calendarUpdate->broadcastUpdate('delete', ['id' => $eventId]);
+                }
+                
+                return true;
+                
+            } catch (Exception $e) {
+                $this->pdo->rollBack();
+                throw $e;
             }
-            
-            return true;
             
         } catch (PDOException $e) {
             error_log("Error deleting event: " . $e->getMessage());
             throw new Exception("Failed to delete event");
-        }
-    }
-    
-    /**
-     * Move/reschedule an event
-     * 
-     * @param int $eventId Event ID
-     * @param int $userId User ID (for ownership verification)
-     * @param string $newStartDateTime New start date and time
-     * @param string $newEndDateTime New end date and time (optional)
-     * @return array Updated event data
-     */
-    public function moveEvent($eventId, $userId, $newStartDateTime, $newEndDateTime = null) {
-        try {
-            if (!$newEndDateTime) {
-                // Calculate duration from existing event
-                $existingEvent = $this->getEventRaw($eventId);
-                if ($existingEvent) {
-                    $start = new DateTime($existingEvent['start_datetime']);
-                    $end = new DateTime($existingEvent['end_datetime']);
-                    $duration = $end->diff($start);
-                    
-                    $newStart = new DateTime($newStartDateTime);
-                    $newEnd = clone $newStart;
-                    $newEnd->add($duration);
-                    $newEndDateTime = $newEnd->format('Y-m-d H:i:s');
-                }
-            }
-            
-            return $this->updateEvent($eventId, $userId, [
-                'title' => $existingEvent['title'], // Keep existing title
-                'start' => $newStartDateTime,
-                'end' => $newEndDateTime ?? $newStartDateTime
-            ]);
-            
-        } catch (Exception $e) {
-            error_log("Error moving event: " . $e->getMessage());
-            throw new Exception("Failed to move event");
         }
     }
     
@@ -336,10 +424,13 @@ class Event {
     public function getEventsInRange($startDate, $endDate, $userIds = null) {
         try {
             $sql = "
-                SELECT e.*, u.name as user_name, u.color as user_color 
-                FROM events e 
-                JOIN users u ON e.user_id = u.id 
-                WHERE e.start_datetime >= ? AND e.start_datetime <= ?
+                SELECT e.episode_ID, e.episode_Title, e.episode_Start_Date_Time, 
+                       e.episode_End_Date_Time, e.episode_Color, e.user_ID,
+                       u.user_Name as user_name
+                FROM episode e 
+                JOIN user u ON e.user_ID = u.user_ID 
+                WHERE e.episode_Start_Date_Time >= ? AND e.episode_Start_Date_Time <= ?
+                  AND u.user_Status = 'Active'
             ";
             $params = [$startDate, $endDate . ' 23:59:59'];
             
@@ -347,12 +438,12 @@ class Event {
                 $userIds = array_filter($userIds, 'is_numeric');
                 if (!empty($userIds)) {
                     $placeholders = str_repeat('?,', count($userIds) - 1) . '?';
-                    $sql .= " AND e.user_id IN ($placeholders)";
+                    $sql .= " AND e.user_ID IN ($placeholders)";
                     $params = array_merge($params, $userIds);
                 }
             }
             
-            $sql .= " ORDER BY e.start_datetime";
+            $sql .= " ORDER BY e.episode_Start_Date_Time";
             
             $stmt = $this->pdo->prepare($sql);
             $stmt->execute($params);
@@ -380,19 +471,21 @@ class Event {
             $searchTerm = "%{$query}%";
             
             $sql = "
-                SELECT e.*, u.name as user_name, u.color as user_color 
-                FROM events e 
-                JOIN users u ON e.user_id = u.id 
-                WHERE e.title LIKE ?
+                SELECT e.episode_ID, e.episode_Title, e.episode_Start_Date_Time, 
+                       e.episode_End_Date_Time, e.episode_Color, e.user_ID,
+                       u.user_Name as user_name
+                FROM episode e 
+                JOIN user u ON e.user_ID = u.user_ID 
+                WHERE e.episode_Title LIKE ? AND u.user_Status = 'Active'
             ";
             $params = [$searchTerm];
             
             if ($userId) {
-                $sql .= " AND e.user_id = ?";
+                $sql .= " AND e.user_ID = ?";
                 $params[] = $userId;
             }
             
-            $sql .= " ORDER BY e.start_datetime DESC LIMIT ?";
+            $sql .= " ORDER BY e.episode_Start_Date_Time DESC LIMIT ?";
             $params[] = $limit;
             
             $stmt = $this->pdo->prepare($sql);
@@ -418,11 +511,14 @@ class Event {
     public function getUpcomingEvents($userId, $limit = 10) {
         try {
             $stmt = $this->pdo->prepare("
-                SELECT e.*, u.name as user_name, u.color as user_color 
-                FROM events e 
-                JOIN users u ON e.user_id = u.id 
-                WHERE e.user_id = ? AND e.start_datetime >= NOW()
-                ORDER BY e.start_datetime ASC 
+                SELECT e.episode_ID, e.episode_Title, e.episode_Start_Date_Time, 
+                       e.episode_End_Date_Time, e.episode_Color, e.user_ID,
+                       u.user_Name as user_name
+                FROM episode e 
+                JOIN user u ON e.user_ID = u.user_ID 
+                WHERE e.user_ID = ? AND e.episode_Start_Date_Time >= NOW() 
+                  AND u.user_Status = 'Active'
+                ORDER BY e.episode_Start_Date_Time ASC 
                 LIMIT ?
             ");
             $stmt->execute([$userId, $limit]);
@@ -448,12 +544,12 @@ class Event {
             $stmt = $this->pdo->prepare("
                 SELECT 
                     COUNT(*) as total_events,
-                    COUNT(CASE WHEN start_datetime >= NOW() THEN 1 END) as upcoming_events,
-                    COUNT(CASE WHEN start_datetime < NOW() THEN 1 END) as past_events,
-                    MIN(start_datetime) as first_event,
-                    MAX(start_datetime) as latest_event
-                FROM events 
-                WHERE user_id = ?
+                    COUNT(CASE WHEN episode_Start_Date_Time >= NOW() THEN 1 END) as upcoming_events,
+                    COUNT(CASE WHEN episode_Start_Date_Time < NOW() THEN 1 END) as past_events,
+                    MIN(episode_Start_Date_Time) as first_event,
+                    MAX(episode_Start_Date_Time) as latest_event
+                FROM episode 
+                WHERE user_ID = ?
             ");
             $stmt->execute([$userId]);
             
@@ -473,14 +569,14 @@ class Event {
      */
     private function formatEventForCalendar($event) {
         return [
-            'id' => (int)$event['id'],
-            'title' => $event['title'],
-            'start' => $event['start_datetime'],
-            'end' => $event['end_datetime'],
-            'backgroundColor' => $event['user_color'],
-            'borderColor' => $event['user_color'],
+            'id' => (int)$event['episode_ID'],
+            'title' => $event['episode_Title'],
+            'start' => $event['episode_Start_Date_Time'],
+            'end' => $event['episode_End_Date_Time'],
+            'backgroundColor' => $event['episode_Color'] ?? '#3498db',
+            'borderColor' => $event['episode_Color'] ?? '#3498db',
             'extendedProps' => [
-                'userId' => (int)$event['user_id'],
+                'userId' => (int)$event['user_ID'],
                 'userName' => $event['user_name']
             ]
         ];
@@ -489,17 +585,69 @@ class Event {
     /**
      * Get raw event data (internal use)
      * 
-     * @param int $eventId Event ID
+     * @param int $eventId Event ID (episode_ID)
      * @return array|null Raw event data
      */
     private function getEventRaw($eventId) {
         try {
-            $stmt = $this->pdo->prepare("SELECT * FROM events WHERE id = ?");
+            $stmt = $this->pdo->prepare("SELECT * FROM episode WHERE episode_ID = ?");
             $stmt->execute([$eventId]);
             return $stmt->fetch();
         } catch (PDOException $e) {
             error_log("Error fetching raw event: " . $e->getMessage());
             return null;
+        }
+    }
+    
+    /**
+     * Get default facility ID
+     */
+    private function getDefaultFacilityId() {
+        try {
+            $stmt = $this->pdo->query("SELECT facility_ID FROM facility WHERE facility_Status = 'Active' ORDER BY facility_ID LIMIT 1");
+            $facility = $stmt->fetch();
+            return $facility ? $facility['facility_ID'] : 1;
+        } catch (Exception $e) {
+            return 1;
+        }
+    }
+    
+    /**
+     * Get default program ID
+     */
+    private function getDefaultProgramId() {
+        try {
+            $stmt = $this->pdo->query("SELECT program_ID FROM program WHERE program_Status = 'Active' ORDER BY program_ID LIMIT 1");
+            $program = $stmt->fetch();
+            return $program ? $program['program_ID'] : 1;
+        } catch (Exception $e) {
+            return 1;
+        }
+    }
+    
+    /**
+     * Get default team ID
+     */
+    private function getDefaultTeamId($userId = null) {
+        try {
+            $stmt = $this->pdo->query("SELECT team_ID FROM team ORDER BY team_ID LIMIT 1");
+            $team = $stmt->fetch();
+            return $team ? $team['team_ID'] : 1;
+        } catch (Exception $e) {
+            return 1;
+        }
+    }
+    
+    /**
+     * Get default resource ID
+     */
+    private function getDefaultResourceId() {
+        try {
+            $stmt = $this->pdo->query("SELECT resource_ID FROM resource WHERE resource_Status = 'Active' ORDER BY resource_ID LIMIT 1");
+            $resource = $stmt->fetch();
+            return $resource ? $resource['resource_ID'] : 1;
+        } catch (Exception $e) {
+            return 1;
         }
     }
     
@@ -516,8 +664,8 @@ class Event {
             throw new Exception('Event title is required');
         }
         
-        if (strlen(trim($title)) > 255) {
-            throw new Exception('Event title is too long (maximum 255 characters)');
+        if (strlen(trim($title)) > 100) {
+            throw new Exception('Event title is too long (maximum 100 characters)');
         }
         
         if (empty($startDateTime)) {
@@ -550,12 +698,6 @@ class Event {
                 throw new Exception('End date and time must be after start date and time');
             }
             
-            // Optional: Check if event is too long (e.g., more than 7 days)
-            $diff = $end->diff($start);
-            if ($diff->days > 7) {
-                error_log("Warning: Long event created - {$diff->days} days");
-            }
-            
         } catch (Exception $e) {
             if (strpos($e->getMessage(), 'End date') === 0) {
                 throw $e;
@@ -586,7 +728,7 @@ class Event {
      */
     public function getEventCount() {
         try {
-            $stmt = $this->pdo->query("SELECT COUNT(*) FROM events");
+            $stmt = $this->pdo->query("SELECT COUNT(*) FROM episode");
             return (int)$stmt->fetchColumn();
         } catch (PDOException $e) {
             error_log("Error getting event count: " . $e->getMessage());

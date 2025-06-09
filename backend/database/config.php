@@ -1,17 +1,15 @@
 <?php
 /**
- * Updated Database Configuration - Refactored Version
+ * Updated Database Configuration for itmdev
  * Location: backend/database/config.php
  * 
- * This file handles database connection and provides the legacy broadcastUpdate
- * function for backward compatibility with existing SSE code.
- * 
- * The broadcastUpdate function now delegates to the CalendarUpdate model.
+ * This file handles database connection for the itmdev ice time management system
+ * and provides legacy broadcastUpdate function for backward compatibility.
  */
 
 // Database configuration
 $host = 'localhost';
-$dbname = 'collaborative_calendar';
+$dbname = 'itmdev';  // Changed from 'collaborative_calendar'
 $username = 'root'; // Change to your MySQL username
 $password = '';     // Change to your MySQL password
 
@@ -51,7 +49,7 @@ function broadcastUpdate($pdo, $eventType, $eventData) {
 }
 
 /**
- * Helper function to get or create user (updated to use User model)
+ * Helper function to get or create user (updated for itmdev user table)
  * 
  * @param PDO $pdo Database connection
  * @param string $name User name
@@ -60,26 +58,49 @@ function broadcastUpdate($pdo, $eventType, $eventData) {
  */
 function getOrCreateUser($pdo, $name) {
     try {
-        // For backward compatibility, we'll still use direct database queries
-        // but this should ideally use the User model
-        
-        // Check if user exists
-        $stmt = $pdo->prepare("SELECT * FROM users WHERE name = ?");
+        // Check if user exists in new user table
+        $stmt = $pdo->prepare("SELECT * FROM user WHERE user_Name = ?");
         $stmt->execute([$name]);
         $user = $stmt->fetch();
         
         if (!$user) {
-            // Create new user with random color
+            // Create new user with random color and default role
             $colors = ['#e74c3c', '#2ecc71', '#f39c12', '#9b59b6', '#1abc9c', '#34495e', '#e67e22', '#3498db'];
             $color = $colors[array_rand($colors)];
             
-            $stmt = $pdo->prepare("INSERT INTO users (name, color) VALUES (?, ?)");
-            $stmt->execute([$name, $color]);
+            // Get the Calendar User role ID (or create it)
+            $roleStmt = $pdo->prepare("SELECT role_ID FROM role WHERE role_Name = 'Calendar User'");
+            $roleStmt->execute();
+            $role = $roleStmt->fetch();
+            
+            if (!$role) {
+                // Create default Calendar User role
+                $createRoleStmt = $pdo->prepare("
+                    INSERT INTO role (role_Name, role_Desc, role_Level, role_Entity, created_by) 
+                    VALUES ('Calendar User', 'Imported from calendar-app', 10, 'calendar', 'migration')
+                ");
+                $createRoleStmt->execute();
+                $roleId = $pdo->lastInsertId();
+            } else {
+                $roleId = $role['role_ID'];
+            }
+            
+            // Generate unique email if not provided
+            $email = "user{$name}@example.com";
+            $email = strtolower(str_replace(' ', '', $email));
+            
+            $stmt = $pdo->prepare("
+                INSERT INTO user (role_ID, user_Name, user_Email, password, user_Status, created_by) 
+                VALUES (?, ?, ?, '', 'Active', 'calendar_migration')
+            ");
+            $stmt->execute([$roleId, $name, $email]);
             
             $user = [
-                'id' => $pdo->lastInsertId(),
-                'name' => $name,
-                'color' => $color
+                'user_ID' => $pdo->lastInsertId(),
+                'user_Name' => $name,
+                'user_Email' => $email,
+                'color' => $color,  // This will be handled in frontend
+                'role_ID' => $roleId
             ];
         }
         
@@ -108,17 +129,17 @@ function testDatabaseConnection($pdo) {
 
 /**
  * Initialize database tables if they don't exist
- * This is a safety function for development environments
+ * Updated for itmdev schema
  */
 function initializeDatabaseTables($pdo) {
     try {
-        // Check if tables exist
-        $tables = ['users', 'events', 'calendar_updates', 'user_sessions'];
+        // Check if required tables exist
+        $tables = ['user', 'event', 'episode', 'event_updates', 'session', 'role', 'facility', 'program', 'team'];
         
         foreach ($tables as $table) {
             $stmt = $pdo->query("SHOW TABLES LIKE '{$table}'");
             if (!$stmt->fetch()) {
-                throw new Exception("Database table '{$table}' not found. Please import the SQL schema from documentation/calendar-app.sql");
+                throw new Exception("Database table '{$table}' not found. Please import the SQL schema from documentation/itmdev.sql");
             }
         }
         
@@ -130,7 +151,7 @@ function initializeDatabaseTables($pdo) {
 }
 
 /**
- * Clear old calendar updates using the CalendarUpdate model
+ * Clear old event updates using the CalendarUpdate model
  * 
  * @param PDO $pdo Database connection (kept for compatibility)
  */
@@ -142,6 +163,80 @@ function clearOldUpdates($pdo) {
     } catch (Exception $e) {
         error_log("Error clearing old updates: " . $e->getMessage());
         return 0;
+    }
+}
+
+/**
+ * Get default facility ID for events
+ * 
+ * @return int Default facility ID
+ */
+function getDefaultFacilityId() {
+    global $pdo;
+    
+    try {
+        $stmt = $pdo->query("SELECT facility_ID FROM facility ORDER BY facility_ID LIMIT 1");
+        $facility = $stmt->fetch();
+        return $facility ? $facility['facility_ID'] : 1;
+    } catch (Exception $e) {
+        error_log("Error getting default facility: " . $e->getMessage());
+        return 1;
+    }
+}
+
+/**
+ * Get default program ID for events
+ * 
+ * @return int Default program ID
+ */
+function getDefaultProgramId() {
+    global $pdo;
+    
+    try {
+        $stmt = $pdo->query("SELECT program_ID FROM program ORDER BY program_ID LIMIT 1");
+        $program = $stmt->fetch();
+        return $program ? $program['program_ID'] : 1;
+    } catch (Exception $e) {
+        error_log("Error getting default program: " . $e->getMessage());
+        return 1;
+    }
+}
+
+/**
+ * Get default team ID for a user
+ * 
+ * @param int $userId User ID
+ * @return int Default team ID
+ */
+function getDefaultTeamId($userId = null) {
+    global $pdo;
+    
+    try {
+        // Try to find a team associated with the user's program
+        $stmt = $pdo->query("SELECT team_ID FROM team ORDER BY team_ID LIMIT 1");
+        $team = $stmt->fetch();
+        return $team ? $team['team_ID'] : 1;
+    } catch (Exception $e) {
+        error_log("Error getting default team: " . $e->getMessage());
+        return 1;
+    }
+}
+
+/**
+ * Get default resource ID for events
+ * 
+ * @return int Default resource ID
+ */
+function getDefaultResourceId() {
+    global $pdo;
+    
+    try {
+        $stmt = $pdo->query("SELECT resource_ID FROM resource ORDER BY resource_ID LIMIT 1");
+        $resource = $stmt->fetch();
+        return $resource ? $resource['resource_ID'] : 1;
+    } catch (Exception $e) {
+        error_log("Error getting default resource: " . $e->getMessage());
+        return 1;
     }
 }
 
@@ -164,7 +259,7 @@ if (rand(1, 20) === 1) { // 5% chance to clean up old updates
 }
 
 /**
- * Get database statistics
+ * Get database statistics for itmdev
  * 
  * @return array Database statistics
  */
@@ -175,20 +270,32 @@ function getDatabaseStats() {
         $stats = [];
         
         // User count
-        $stmt = $pdo->query("SELECT COUNT(*) as user_count FROM users");
+        $stmt = $pdo->query("SELECT COUNT(*) as user_count FROM user");
         $stats['users'] = $stmt->fetch()['user_count'];
         
-        // Event count
-        $stmt = $pdo->query("SELECT COUNT(*) as event_count FROM events");
+        // Event count (events table)
+        $stmt = $pdo->query("SELECT COUNT(*) as event_count FROM event");
         $stats['events'] = $stmt->fetch()['event_count'];
+        
+        // Episode count (actual event instances)
+        $stmt = $pdo->query("SELECT COUNT(*) as episode_count FROM episode");
+        $stats['episodes'] = $stmt->fetch()['episode_count'];
         
         // Update stats
         $updateStats = $calendarUpdate->getUpdateStats();
         $stats['updates'] = $updateStats;
         
         // Session count
-        $stmt = $pdo->query("SELECT COUNT(*) as session_count FROM user_sessions WHERE is_active = 1 AND expires_at > NOW()");
+        $stmt = $pdo->query("SELECT COUNT(*) as session_count FROM session WHERE is_active = 1 AND expires_at > NOW()");
         $stats['active_sessions'] = $stmt->fetch()['session_count'];
+        
+        // Facility count
+        $stmt = $pdo->query("SELECT COUNT(*) as facility_count FROM facility WHERE facility_Status = 'Active'");
+        $stats['facilities'] = $stmt->fetch()['facility_count'];
+        
+        // Program count
+        $stmt = $pdo->query("SELECT COUNT(*) as program_count FROM program WHERE program_Status = 'Active'");
+        $stats['programs'] = $stmt->fetch()['program_count'];
         
         return $stats;
         

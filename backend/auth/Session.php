@@ -1,9 +1,9 @@
 <?php
 /**
- * Session Management Class for Collaborative Calendar
+ * Session Management Class for itmdev
  * Location: backend/auth/Session.php
  * 
- * Handles secure session creation, validation, and cleanup
+ * Updated to work with the itmdev session table
  */
 
 class Session {
@@ -39,11 +39,11 @@ class Session {
             $ipAddress = $this->getClientIP();
             $userAgent = $_SERVER['HTTP_USER_AGENT'] ?? '';
             
-            // Insert session record
+            // Insert session record into itmdev session table
             $stmt = $this->pdo->prepare("
-                INSERT INTO user_sessions 
-                (id, user_id, expires_at, ip_address, user_agent, remember_me, is_active) 
-                VALUES (?, ?, ?, ?, ?, ?, 1)
+                INSERT INTO session 
+                (php_Session_ID, user_ID, expires_at, ip_address, user_agent, remember_me, is_active, created_by) 
+                VALUES (?, ?, ?, ?, ?, ?, 1, 'calendar_system')
             ");
             
             $stmt->execute([
@@ -77,12 +77,14 @@ class Session {
                 return null;
             }
             
-            // Get session with user data
+            // Get session with user data from itmdev tables
             $stmt = $this->pdo->prepare("
-                SELECT s.*, u.id as user_id, u.name, u.email, u.color 
-                FROM user_sessions s
-                JOIN users u ON s.user_id = u.id
-                WHERE s.id = ? AND s.is_active = 1 AND s.expires_at > NOW()
+                SELECT s.*, u.user_ID as user_id, u.user_Name as name, 
+                       u.user_Email as email, '#3498db' as color
+                FROM session s
+                JOIN user u ON s.user_ID = u.user_ID
+                WHERE s.php_Session_ID = ? AND s.is_active = 1 AND s.expires_at > NOW()
+                  AND u.user_Status = 'Active'
             ");
             
             $stmt->execute([$sessionId]);
@@ -125,9 +127,9 @@ class Session {
     public function destroy($sessionId) {
         try {
             $stmt = $this->pdo->prepare("
-                UPDATE user_sessions 
-                SET is_active = 0 
-                WHERE id = ?
+                UPDATE session 
+                SET is_active = 0, session_End_Reason = 'logout', updated_by = 'calendar_system'
+                WHERE php_Session_ID = ?
             ");
             
             $stmt->execute([$sessionId]);
@@ -151,9 +153,9 @@ class Session {
     public function destroyAllUserSessions($userId) {
         try {
             $stmt = $this->pdo->prepare("
-                UPDATE user_sessions 
-                SET is_active = 0 
-                WHERE user_id = ?
+                UPDATE session 
+                SET is_active = 0, session_End_Reason = 'logout_all', updated_by = 'calendar_system'
+                WHERE user_ID = ?
             ");
             
             $stmt->execute([$userId]);
@@ -177,10 +179,11 @@ class Session {
     public function getUserSessions($userId) {
         try {
             $stmt = $this->pdo->prepare("
-                SELECT id, created_at, expires_at, ip_address, user_agent, remember_me
-                FROM user_sessions 
-                WHERE user_id = ? AND is_active = 1 AND expires_at > NOW()
-                ORDER BY created_at DESC
+                SELECT php_Session_ID as id, create_ts as created_at, expires_at, 
+                       ip_address, user_agent, remember_me
+                FROM session 
+                WHERE user_ID = ? AND is_active = 1 AND expires_at > NOW()
+                ORDER BY create_ts DESC
             ");
             
             $stmt->execute([$userId]);
@@ -200,19 +203,32 @@ class Session {
      */
     public function cleanupExpiredSessions() {
         try {
+            // Mark expired sessions as inactive
             $stmt = $this->pdo->prepare("
-                DELETE FROM user_sessions 
+                UPDATE session 
+                SET is_active = 0, session_End_Reason = 'expired', updated_by = 'system_cleanup'
                 WHERE expires_at < NOW() OR is_active = 0
             ");
             
             $stmt->execute();
-            $deletedCount = $stmt->rowCount();
+            $updatedCount = $stmt->rowCount();
             
-            if ($deletedCount > 0) {
-                error_log("Cleaned up {$deletedCount} expired sessions");
+            // Actually delete very old sessions (older than 7 days)
+            $deleteStmt = $this->pdo->prepare("
+                DELETE FROM session 
+                WHERE create_ts < DATE_SUB(NOW(), INTERVAL 7 DAY) AND is_active = 0
+            ");
+            
+            $deleteStmt->execute();
+            $deletedCount = $deleteStmt->rowCount();
+            
+            $totalCleaned = $updatedCount + $deletedCount;
+            
+            if ($totalCleaned > 0) {
+                error_log("Cleaned up {$totalCleaned} expired sessions ({$updatedCount} marked inactive, {$deletedCount} deleted)");
             }
             
-            return $deletedCount;
+            return $totalCleaned;
             
         } catch (Exception $e) {
             error_log("Session cleanup error: " . $e->getMessage());
@@ -230,9 +246,9 @@ class Session {
             // Only update if more than 5 minutes have passed since creation
             // to avoid excessive database writes
             $stmt = $this->pdo->prepare("
-                UPDATE user_sessions 
-                SET created_at = created_at 
-                WHERE id = ? AND created_at < DATE_SUB(NOW(), INTERVAL 5 MINUTE)
+                UPDATE session 
+                SET updated_by = 'activity_touch'
+                WHERE php_Session_ID = ? AND create_ts < DATE_SUB(NOW(), INTERVAL 5 MINUTE)
             ");
             
             $stmt->execute([$sessionId]);
@@ -287,6 +303,35 @@ class Session {
         
         // Fallback to REMOTE_ADDR even if it's private (for local development)
         return $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+    }
+    
+    /**
+     * Get session statistics
+     * 
+     * @return array Session statistics
+     */
+    public function getSessionStats() {
+        try {
+            $stmt = $this->pdo->query("
+                SELECT 
+                    COUNT(*) as total_sessions,
+                    COUNT(CASE WHEN is_active = 1 AND expires_at > NOW() THEN 1 END) as active_sessions,
+                    COUNT(CASE WHEN remember_me = 1 THEN 1 END) as remember_me_sessions,
+                    COUNT(CASE WHEN create_ts >= DATE_SUB(NOW(), INTERVAL 24 HOUR) THEN 1 END) as recent_sessions
+                FROM session
+            ");
+            
+            return $stmt->fetch();
+            
+        } catch (Exception $e) {
+            error_log("Session stats error: " . $e->getMessage());
+            return [
+                'total_sessions' => 0,
+                'active_sessions' => 0,
+                'remember_me_sessions' => 0,
+                'recent_sessions' => 0
+            ];
+        }
     }
 }
 ?>
