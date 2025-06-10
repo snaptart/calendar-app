@@ -12,6 +12,7 @@ class LoginForm extends BaseForm {
         $loginConfig = [
             'formId' => 'loginForm',
             'method' => 'POST',
+            'action' => '../../backend/api.php',
             'class' => 'auth-form active',
             'validation' => [
                 'clientSide' => true,
@@ -57,19 +58,34 @@ class LoginForm extends BaseForm {
     private function setupLoginFields() {
         $this->addHidden('action', 'login');
         
-        $this->addEmail('email', 'Email Address', [
+        // Use specific IDs that match JavaScript expectations
+        $this->addField([
+            'name' => 'email',
+            'type' => 'email',
+            'id' => 'loginEmail', // Specific ID for JavaScript
+            'label' => 'Email Address',
             'required' => true,
             'placeholder' => 'Enter your email...',
             'autocomplete' => 'email'
         ]);
         
-        $this->addPassword('password', 'Password', [
+        $this->addField([
+            'name' => 'password',
+            'type' => 'password',
+            'id' => 'loginPassword', // Specific ID for JavaScript
+            'label' => 'Password',
             'required' => true,
             'placeholder' => 'Enter your password...',
             'autocomplete' => 'current-password'
         ]);
         
-        $this->addCheckbox('rememberMe', 'Remember me for 30 days');
+        $this->addField([
+            'name' => 'rememberMe',
+            'type' => 'checkbox',
+            'id' => 'rememberMe', // Specific ID for JavaScript
+            'label' => 'Remember me for 30 days',
+            'value' => '1'
+        ]);
         
         $this->addSubmit('Sign In', [
             'class' => 'auth-button'
@@ -157,23 +173,40 @@ class LoginForm extends BaseForm {
     private function setupRegistrationFields() {
         $this->addHidden('action', 'register');
         
-        $this->addText('name', 'Full Name', [
+        // Use specific IDs that match JavaScript expectations
+        $this->addField([
+            'name' => 'name',
+            'type' => 'text',
+            'id' => 'registerName', // Specific ID for JavaScript
+            'label' => 'Full Name',
             'required' => true,
             'placeholder' => 'Enter your full name...'
         ]);
         
-        $this->addEmail('email', 'Email Address', [
+        $this->addField([
+            'name' => 'email',
+            'type' => 'email',
+            'id' => 'registerEmail', // Specific ID for JavaScript
+            'label' => 'Email Address',
             'required' => true,
             'placeholder' => 'Enter your email...'
         ]);
         
-        $this->addPassword('password', 'Password', [
+        $this->addField([
+            'name' => 'password',
+            'type' => 'password',
+            'id' => 'registerPassword', // Specific ID for JavaScript
+            'label' => 'Password',
             'required' => true,
             'placeholder' => 'Create a password...',
             'minlength' => 6
         ]);
         
-        $this->addPassword('confirmPassword', 'Confirm Password', [
+        $this->addField([
+            'name' => 'confirmPassword',
+            'type' => 'password',
+            'id' => 'confirmPassword', // Specific ID for JavaScript
+            'label' => 'Confirm Password',
             'required' => true,
             'placeholder' => 'Confirm your password...',
             'minlength' => 6
