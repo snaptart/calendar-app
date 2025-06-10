@@ -12,7 +12,19 @@
         return;
     }
     
-    const { EventBus, Config, Utils, APIClient, AuthGuard, UIManager, SSEManager } = window.IceTimeApp;
+// WITH this safer approach:
+	const EventBus = window.IceTimeApp?.EventBus;
+	const Config = window.IceTimeApp?.Config;
+	const Utils = window.IceTimeApp?.Utils;
+	const APIClient = window.IceTimeApp?.APIClient;
+	const AuthGuard = window.IceTimeApp?.AuthGuard;
+	const UIManager = window.IceTimeApp?.UIManager;
+	const SSEManager = window.IceTimeApp?.SSEManager;
+
+	// Add safety check
+	if (!AuthGuard) {
+		console.error('AuthGuard not available, calendar.js may have loaded too early');
+	}
     
     // =============================================================================
     // USER MANAGER - Calendar Specific
@@ -740,6 +752,13 @@
         
         const init = async () => {
             console.log('Initializing Calendar Page...');
+
+    // Wait for AuthGuard to be ready
+			if (!AuthGuard) {
+				console.log('Waiting for AuthGuard...');
+				setTimeout(init, 100);
+				return;
+			}
             
             const isAuthenticated = await AuthGuard.checkAuthentication();
             
@@ -778,14 +797,14 @@
     // Export to global scope for access from other scripts
     window.IceTimeApp.CalendarApp = CalendarApp;
     
-    // Auto-initialize when DOM is ready
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', () => {
-            CalendarApp.init();
-        });
-    } else {
-        CalendarApp.init();
-    }
+// Auto-initialize when DOM is ready with delay for core.js
+	if (document.readyState === 'loading') {
+		document.addEventListener('DOMContentLoaded', () => {
+			setTimeout(() => CalendarApp.init(), 100);
+		});
+	} else {
+		setTimeout(() => CalendarApp.init(), 100);
+	}
     
     // Cleanup on page unload
     window.addEventListener('beforeunload', () => {

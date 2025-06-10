@@ -206,7 +206,7 @@ class ConfigService {
             'calendar' => [
                 'https://cdnjs.cloudflare.com/ajax/libs/jquery-datetimepicker/2.5.20/jquery.datetimepicker.full.min.js',
                 'https://cdn.jsdelivr.net/npm/fullcalendar@6.1.17/index.global.min.js',
-				'../assets/js/script.js' // Load script.js instead of calendar.js
+                '../assets/js/calendar.js' // Uses core.js (no duplicates)
             ],
             'events' => [
                 'https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js',
