@@ -324,19 +324,13 @@ class AppLayout extends BaseLayout {
     /**
      * Add component initialization scripts
      */
-    public function addComponentScripts() {
-        // Universal component initializer (must be loaded first)
-        $this->addJS('../assets/js/components.js');
-        
-        // Individual component scripts
-        $this->addJS('../assets/js/script.js');        // Calendar components
-        $this->addJS('../assets/js/events.js');        // DataTable components
-        $this->addJS('../assets/js/users.js');         // User management components
-        $this->addJS('../assets/js/import.js');        // Import components
-        $this->addJS('../assets/js/auth.js');          // Authentication/form components
-        
-        return $this;
-    }
+	 public function addComponentScripts()
+	 {
+		 // Load in proper order: core utilities first, then page scripts
+		 $this->addJS('../assets/js/script.js');        // Main calendar functionality
+
+		 return $this;
+	 }
     
     /**
      * Enhanced method to add authentication scripts with component support

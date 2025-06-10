@@ -227,9 +227,22 @@ const ComponentInitializer = {
         // Set loading state
         DataAttributeUtils.setState(element, 'loading');
         
-        try {
-            // Initialize component
-            const instance = componentDef.init(element, data);
+		try {
+			// Check if required dependencies are loaded
+			if (data.component === 'calendar' && typeof FullCalendar === 'undefined') {
+				console.warn('FullCalendar not loaded yet, deferring initialization');
+				setTimeout(() => this.initializeComponent(element), 100);
+				return;
+			}
+
+			if (data.component === 'datatable' && typeof $.fn.DataTable === 'undefined') {
+				console.warn('DataTables not loaded yet, deferring initialization');
+				setTimeout(() => this.initializeComponent(element), 100);
+				return;
+			}
+
+			// Initialize component
+			const instance = componentDef.init(element, data);
             
             if (instance) {
                 // Store instance reference

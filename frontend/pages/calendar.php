@@ -59,38 +59,7 @@ AppLayout::createCalendarPage(
     function() use ($auth, $initialEvents, $users, $currentUser) {
         ?>
         <div class="calendar-wrapper">
-            <div id="calendar"
-                 data-component="calendar"
-                 data-component-id="main-calendar"
-                 data-config='<?php echo json_encode([
-                     'initialView' => 'dayGridMonth',
-                     'height' => 'auto',
-                     'editable' => true,
-                     'selectable' => true,
-                     'selectMirror' => true,
-                     'eventStartEditable' => true,
-                     'eventDurationEditable' => true,
-                     'eventResizableFromStart' => true,
-                     'dayMaxEvents' => true,
-                     'weekends' => true,
-                     'snapDuration' => '00:05:00',
-                     'timeInterval' => 15
-                 ], JSON_HEX_APOS | JSON_HEX_QUOT); ?>'
-                 data-events='<?php echo json_encode($initialEvents, JSON_HEX_APOS | JSON_HEX_QUOT); ?>'
-                 data-users='<?php echo json_encode($users, JSON_HEX_APOS | JSON_HEX_QUOT); ?>'
-                 data-current-user='<?php echo json_encode($currentUser, JSON_HEX_APOS | JSON_HEX_QUOT); ?>'
-                 data-permissions='<?php echo json_encode([
-                     'canCreate' => true,
-                     'canEdit' => true,
-                     'canDelete' => true,
-                     'editOwnOnly' => true
-                 ], JSON_HEX_APOS | JSON_HEX_QUOT); ?>'
-                 data-real-time="true"
-                 data-sse-enabled="true"
-                 data-api-url="../../backend/api.php?action=events"
-                 data-sse-url="../../backend/workers/sse.php"
-                 data-modal-target="#eventModal"
-                 data-auto-init="true">
+			<div id="calendar">
             </div>
         </div>
 
