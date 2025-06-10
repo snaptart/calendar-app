@@ -1,4 +1,4 @@
-// Core Utilities - Shared across all pages
+// Core Utilities - Shared across all pages - FIXED VERSION
 // Location: frontend/assets/js/core.js
 // 
 // This file contains all shared utilities and should be loaded first
@@ -9,6 +9,50 @@
 
 window.IceTimeApp = window.IceTimeApp || {};
 
+// =============================================================================
+// EVENT BUS (MISSING IN ORIGINAL) - NOW IMPLEMENTED
+// =============================================================================
+
+window.IceTimeApp.EventBus = (() => {
+    const events = {};
+    
+    return {
+        on(event, callback) {
+            if (!events[event]) {
+                events[event] = [];
+            }
+            events[event].push(callback);
+        },
+        
+        off(event, callback) {
+            if (!events[event]) {
+                return;
+            }
+            events[event] = events[event].filter(cb => cb !== callback);
+        },
+        
+        emit(event, data) {
+            if (!events[event]) {
+                return;
+            }
+            events[event].forEach(callback => {
+                try {
+                    callback(data);
+                } catch (error) {
+                    console.error(`Error in event listener for ${event}:`, error);
+                }
+            });
+        },
+        
+        once(event, callback) {
+            const onceCallback = (data) => {
+                callback(data);
+                this.off(event, onceCallback);
+            };
+            this.on(event, onceCallback);
+        }
+    };
+})();
 
 // =============================================================================
 // CONFIGURATION (GLOBAL)
@@ -642,6 +686,7 @@ window.IceTimeApp.SSEManager = (() => {
 // =============================================================================
 
 console.log('Ice Time Management System - Core utilities loaded');
+console.log('Available modules:', Object.keys(window.IceTimeApp));
 
 // Make EventBus available globally for backward compatibility
 if (!window.EventBus) {

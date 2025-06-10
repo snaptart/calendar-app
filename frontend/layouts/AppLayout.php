@@ -327,7 +327,7 @@ class AppLayout extends BaseLayout {
 	 public function addComponentScripts()
 	 {
 		 // Load in proper order: core utilities first, then page scripts
-		 $this->addJS('../assets/js/script.js');        // Main calendar functionality
+		 //$this->addJS('../assets/js/script.js');        // Main calendar functionality
 
 		 return $this;
 	 }
