@@ -21,7 +21,7 @@ class AuthLayout extends BaseLayout {
         // Set auth-specific defaults
         $defaultConfig = [
             'title' => 'Login - Collaborative Calendar',
-            'css' => ['assets/css/login.css'],
+            'css' => ['../assets/css/login.css'],
             'bodyClasses' => ['auth-page']
         ];
         

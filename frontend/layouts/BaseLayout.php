@@ -24,7 +24,7 @@ class BaseLayout {
         // Set default CSS files
         $this->cssFiles = [
             'https://fonts.googleapis.com/css2?family=Noto+Sans:wght@300;400;500;600;700&display=swap',
-            'assets/css/style.css'
+            '../assets/css/style.css'
         ];
         
         // Set default JS files

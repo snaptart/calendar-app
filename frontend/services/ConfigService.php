@@ -167,16 +167,16 @@ class ConfigService {
     public function getCssFiles($page) {
         $cssFiles = [
             'https://fonts.googleapis.com/css2?family=Noto+Sans:wght@300;400;500;600;700&display=swap',
-            $this->getAssetUrl('css/style.css')
+            $this->getAssetUrl('../assets/css/style.css')
         ];
         
         // Page-specific CSS
         $pageSpecificCss = [
-            'login' => ['css/login.css'],
-            'calendar' => ['css/calendar.css'],
-            'events' => ['css/events.css', 'css/table.css'],
-            'users' => ['css/table.css'],
-            'import' => ['css/import.css']
+            'login' => ['../assets/css/login.css'],
+			'calendar' => ['../assets/css/calendar.css'],
+			'events' => ['../assets/css/events.css', '../assets/css/table.css'],
+			'users' => ['../assets/css/table.css'],
+			'import' => ['../assets/css/import.css']
         ];
         
         if (isset($pageSpecificCss[$page])) {
@@ -199,25 +199,25 @@ class ConfigService {
         // Page-specific JavaScript
         $pageSpecificJs = [
             'login' => [
-                'js/auth.js'
+                '../assets/js/auth.js'
             ],
             'calendar' => [
                 'https://cdnjs.cloudflare.com/ajax/libs/jquery-datetimepicker/2.5.20/jquery.datetimepicker.full.min.js',
                 'https://cdn.jsdelivr.net/npm/fullcalendar@6.1.17/index.global.min.js',
-                'js/script.js'
+				'../assets/js/script.js'
             ],
             'events' => [
                 'https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js',
                 'https://cdn.datatables.net/1.13.7/js/dataTables.bootstrap5.min.js',
-                'js/events.js'
+				'../assets/js/events.js'
             ],
             'users' => [
                 'https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js',
                 'https://cdn.datatables.net/1.13.7/js/dataTables.bootstrap5.min.js',
-                'js/users.js'
+				'../assets/js/users.js'
             ],
             'import' => [
-                'js/import.js'
+			'../assets/js/import.js'
             ]
         ];
         
