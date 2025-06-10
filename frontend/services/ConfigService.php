@@ -1,6 +1,6 @@
 <?php
 /**
- * Configuration Service - Fixed version
+ * Configuration Service - Corrected version with proper JavaScript loading order
  * Location: frontend/services/ConfigService.php
  */
 
@@ -18,7 +18,7 @@ class ConfigService {
         // Default configuration
         $this->config = [
             'app' => [
-                'name' => 'Collaborative Calendar',
+                'name' => 'Ice Time Management System',
                 'description' => 'Ice time management system for arenas and skating programs',
                 'version' => '2.0.0',
                 'timezone' => 'America/Chicago'
@@ -173,10 +173,10 @@ class ConfigService {
         // Page-specific CSS
         $pageSpecificCss = [
             'login' => ['../assets/css/login.css'],
-			'calendar' => ['../assets/css/calendar.css'],
-			'events' => ['../assets/css/events.css', '../assets/css/table.css'],
-			'users' => ['../assets/css/table.css'],
-			'import' => ['../assets/css/import.css']
+            'calendar' => ['../assets/css/calendar.css'],
+            'events' => ['../assets/css/events.css', '../assets/css/table.css'],
+            'users' => ['../assets/css/table.css'],
+            'import' => ['../assets/css/import.css']
         ];
         
         if (isset($pageSpecificCss[$page])) {
@@ -189,35 +189,49 @@ class ConfigService {
     }
     
     /**
-     * Get JavaScript files for a page
+     * CORRECTED: Get JavaScript files for a page with proper loading order
      */
     public function getJsFiles($page) {
         $jsFiles = [
-            'https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js'
+            'https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js',
+            // CRITICAL: Load core utilities FIRST to prevent duplicate declarations
+            '../assets/js/core.js'
         ];
         
-        // Page-specific JavaScript
+        // Page-specific JavaScript with corrected filenames and loading order
         $pageSpecificJs = [
             'login' => [
-                '../assets/js/auth.js'
+                '../assets/js/auth.js' // Uses core.js (no duplicates)
             ],
             'calendar' => [
                 'https://cdnjs.cloudflare.com/ajax/libs/jquery-datetimepicker/2.5.20/jquery.datetimepicker.full.min.js',
                 'https://cdn.jsdelivr.net/npm/fullcalendar@6.1.17/index.global.min.js',
-				'../assets/js/script.js'
+                '../assets/js/calendar.js' // Uses core.js (no duplicates)
             ],
             'events' => [
                 'https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js',
                 'https://cdn.datatables.net/1.13.7/js/dataTables.bootstrap5.min.js',
-				'../assets/js/events.js'
+                'https://cdn.datatables.net/buttons/2.4.2/js/dataTables.buttons.min.js',
+                'https://cdn.datatables.net/buttons/2.4.2/js/buttons.html5.min.js',
+                'https://cdn.datatables.net/buttons/2.4.2/js/buttons.print.min.js',
+                'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js',
+                'https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.1.53/pdfmake.min.js',
+                'https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.1.53/vfs_fonts.js',
+                '../assets/js/events.js' // Uses core.js (no duplicates)
             ],
             'users' => [
                 'https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js',
                 'https://cdn.datatables.net/1.13.7/js/dataTables.bootstrap5.min.js',
-				'../assets/js/users.js'
+                'https://cdn.datatables.net/buttons/2.4.2/js/dataTables.buttons.min.js',
+                'https://cdn.datatables.net/buttons/2.4.2/js/buttons.html5.min.js',
+                'https://cdn.datatables.net/buttons/2.4.2/js/buttons.print.min.js',
+                'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js',
+                'https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.1.53/pdfmake.min.js',
+                'https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.1.53/vfs_fonts.js',
+                '../assets/js/users.js' // Uses core.js (no duplicates)
             ],
             'import' => [
-			'../assets/js/import.js'
+                '../assets/js/import.js' // Uses core.js (no duplicates)
             ]
         ];
         
@@ -273,7 +287,13 @@ class ConfigService {
             ]
         ];
         
-        return "window.CalendarConfig = " . json_encode($frontendConfig, JSON_PRETTY_PRINT) . ";";
+        return "
+        // Configuration is now set in core.js as window.IceTimeApp.Config
+        // This maintains backward compatibility if needed
+        if (typeof window.CalendarConfig === 'undefined') {
+            window.CalendarConfig = " . json_encode($frontendConfig, JSON_PRETTY_PRINT) . ";
+        }
+        ";
     }
     
     /**
@@ -296,14 +316,14 @@ class ConfigService {
      */
     private function getPageTitle($page) {
         $titles = [
-            'calendar' => '📅 Collaborative Calendar',
-            'events' => '📅 Events Management',
+            'calendar' => '📅 Ice Time Calendar',
+            'events' => '📅 Ice Time Events',
             'users' => '👥 System Users',
             'import' => '📥 Import Events',
-            'login' => '📅 Calendar'
+            'login' => '📅 Ice Time Management'
         ];
         
-        return $titles[$page] ?? '📅 Calendar';
+        return $titles[$page] ?? '📅 Ice Time Management';
     }
     
     /**

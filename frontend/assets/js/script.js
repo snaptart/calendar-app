@@ -225,7 +225,7 @@ const AuthGuard = (() => {
     };
     
     const redirectToLogin = () => {
-        window.location.href = './login.html';
+        window.location.href = './login.php';
     };
     
     const getCurrentUser = () => currentUser;
