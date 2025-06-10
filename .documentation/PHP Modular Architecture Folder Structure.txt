@@ -3,10 +3,10 @@ Complete folder structure for PHP modular architecture:
 calendar-app/
 ├── .documentation/
 │   ├── calendar-app.sql
-│   ├── Frontend PHP Modular Architecture Folder Structure.txt
 │   ├── itfmvp.sql
 │   ├── itmdev.data.sql
 │   ├── itmdev.sql
+│   ├── PHP Modular Architecture Folder Structure.txt
 │   └── role.sql
 ├── .gitattributes
 ├── .import/
@@ -39,6 +39,7 @@ calendar-app/
 │   │   │   └── table.css
 │   │   └── js/
 │   │       ├── auth.js
+│   │       ├── components.js
 │   │       ├── events.js
 │   │       ├── import.js
 │   │       ├── script.js
@@ -57,6 +58,8 @@ calendar-app/
 │   │   └── ui/
 │   │       ├── FileUpload.php
 │   │       ├── Modal.php
+│   │       ├── Notification.php
+│   │       ├── ProgressBar.php
 │   │       └── StatusIndicator.php
 │   ├── config/
 │   │   └── app.php
