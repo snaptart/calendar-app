@@ -72,15 +72,10 @@ calendar-app/
 │   │   └── BaseLayout.php
 │   ├── pages/
 │   │   ├── calendar.php
-│   │   ├── events.html
 │   │   ├── events.php
-│   │   ├── import.html
 │   │   ├── import.php
-│   │   ├── index.html
-│   │   ├── login.html
 │   │   ├── login.php
-│   │   ├── logout.php
-│   │   └── users.html
+│   │   └── logout.php
 │   └── services/
 │       ├── ApiClient.php
 │       ├── AuthService.php
