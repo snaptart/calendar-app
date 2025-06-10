@@ -1,9 +1,10 @@
 <?php
 /**
- * Calendar Component - Reusable FullCalendar wrapper
+ * Calendar Component - REFACTORED (HTML Generation Only)
  * Location: frontend/components/calendar/Calendar.php
  * 
- * Configurable FullCalendar component that can be used across different pages
+ * Generates semantic HTML with data attributes for JavaScript initialization
+ * All behavior and FullCalendar logic handled by script.js
  */
 
 class Calendar {
@@ -18,6 +19,8 @@ class Calendar {
      * Default configuration
      */
     private $defaultConfig = [
+        'elementId' => 'calendar',
+        'modalId' => 'eventModal',
         'view' => 'dayGridMonth',
         'height' => 'auto',
         'editable' => true,
@@ -32,9 +35,12 @@ class Calendar {
         'timeInterval' => 15,
         'showUserFilters' => true,
         'showEventModal' => true,
+        'realTime' => true,
+        'sseEnabled' => true,
         'apiEndpoints' => [
-            'events' => null, // Will use ConfigService default
-            'users' => null   // Will use ConfigService default
+            'events' => null,
+            'users' => null,
+            'sse' => null
         ],
         'headerToolbar' => [
             'left' => 'prev,next today',
@@ -46,6 +52,13 @@ class Calendar {
             'canEdit' => true,
             'canDelete' => true,
             'editOwnOnly' => true
+        ],
+        'classes' => [
+            'wrapper' => 'calendar-component',
+            'controls' => 'calendar-controls',
+            'userFilters' => 'user-filters',
+            'actions' => 'calendar-actions',
+            'calendar' => 'calendar-wrapper'
         ]
     ];
     
@@ -54,8 +67,8 @@ class Calendar {
      */
     public function __construct($config = []) {
         $this->config = array_merge_recursive($this->defaultConfig, $config);
-        $this->elementId = $config['elementId'] ?? 'calendar';
-        $this->modalId = $config['modalId'] ?? 'eventModal';
+        $this->elementId = $this->config['elementId'];
+        $this->modalId = $this->config['modalId'];
         $this->events = [];
         $this->users = [];
         $this->currentUser = null;
@@ -152,52 +165,53 @@ class Calendar {
     }
     
     /**
-     * Render the calendar HTML
+     * Render the calendar HTML with data attributes
      */
     public function render() {
         ?>
-        <div class="calendar-component">
+        <div class="<?php echo htmlspecialchars($this->config['classes']['wrapper']); ?>">
             <?php if ($this->config['showUserFilters']): ?>
                 <?php $this->renderUserFilters(); ?>
             <?php endif; ?>
             
-            <div class="calendar-wrapper">
-                <div id="<?php echo htmlspecialchars($this->elementId); ?>"></div>
-            </div>
+            <?php $this->renderCalendarContainer(); ?>
             
             <?php if ($this->config['showEventModal']): ?>
                 <?php $this->renderEventModal(); ?>
             <?php endif; ?>
         </div>
-        
-        <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            <?php echo $this->generateCalendarJs(); ?>
-        });
-        </script>
         <?php
     }
     
     /**
-     * Render user filters
+     * Render user filters section
      */
     private function renderUserFilters() {
         ?>
-        <div class="calendar-controls">
-            <div class="user-filters">
+        <div class="<?php echo htmlspecialchars($this->config['classes']['controls']); ?>">
+            <div class="<?php echo htmlspecialchars($this->config['classes']['userFilters']); ?>">
                 <h3>Show Calendars</h3>
-                <div id="<?php echo $this->elementId; ?>UserCheckboxes" class="checkbox-group">
+                <div id="<?php echo $this->elementId; ?>UserCheckboxes" 
+                     class="checkbox-group"
+                     data-component="user-filters"
+                     data-component-id="<?php echo $this->elementId; ?>-user-filters"
+                     data-target="#<?php echo $this->elementId; ?>"
+                     data-auto-init="true">
+                    
                     <?php foreach ($this->users as $user): ?>
                         <?php 
                         $checked = $user['selected'] ? 'checked' : '';
                         $checkedClass = $user['selected'] ? ' checked' : '';
                         ?>
-                        <div class="checkbox-item<?php echo $checkedClass; ?>">
+                        <div class="checkbox-item<?php echo $checkedClass; ?>"
+                             data-user-id="<?php echo $user['id']; ?>">
                             <input 
                                 type="checkbox" 
                                 id="<?php echo $this->elementId; ?>-user-<?php echo $user['id']; ?>" 
                                 value="<?php echo $user['id']; ?>"
                                 class="calendar-user-checkbox"
+                                data-user-name="<?php echo htmlspecialchars($user['name']); ?>"
+                                data-user-color="<?php echo htmlspecialchars($user['color']); ?>"
                                 <?php echo $checked; ?>
                             >
                             <div 
@@ -213,21 +227,37 @@ class Calendar {
                         </div>
                     <?php endforeach; ?>
                 </div>
-                <button id="<?php echo $this->elementId; ?>RefreshUsers" class="btn btn-small btn-outline">
+                
+                <button id="<?php echo $this->elementId; ?>RefreshUsers" 
+                        class="btn btn-small btn-outline"
+                        data-component="button"
+                        data-action="refresh-users"
+                        data-target="#<?php echo $this->elementId; ?>">
                     🔄 Refresh Users
                 </button>
             </div>
             
-            <div class="calendar-actions">
+            <div class="<?php echo htmlspecialchars($this->config['classes']['actions']); ?>">
                 <?php if ($this->config['permissions']['canCreate']): ?>
-                    <button id="<?php echo $this->elementId; ?>AddEvent" class="btn btn-primary">
+                    <button id="<?php echo $this->elementId; ?>AddEvent" 
+                            class="btn btn-primary"
+                            data-component="button"
+                            data-action="add-event"
+                            data-target="#<?php echo $this->elementId; ?>">
                         <span class="btn-icon">+</span>
                         Add Event
                     </button>
                 <?php endif; ?>
                 
                 <div class="connection-status">
-                    <span id="<?php echo $this->elementId; ?>Status" class="status">Ready</span>
+                    <span id="<?php echo $this->elementId; ?>Status" 
+                          class="status"
+                          data-component="status"
+                          data-component-id="<?php echo $this->elementId; ?>-status"
+                          data-initial-state="ready"
+                          data-auto-init="true">
+                        Ready
+                    </span>
                 </div>
             </div>
         </div>
@@ -235,62 +265,171 @@ class Calendar {
     }
     
     /**
-     * Render event modal
+     * Render main calendar container with data attributes
+     */
+    private function renderCalendarContainer() {
+        $calendarConfig = [
+            'initialView' => $this->config['view'],
+            'height' => $this->config['height'],
+            'headerToolbar' => $this->config['headerToolbar'],
+            'editable' => $this->config['editable'],
+            'selectable' => $this->config['selectable'],
+            'selectMirror' => $this->config['selectMirror'],
+            'eventStartEditable' => $this->config['eventStartEditable'],
+            'eventDurationEditable' => $this->config['eventDurationEditable'],
+            'eventResizableFromStart' => $this->config['eventResizableFromStart'],
+            'dayMaxEvents' => $this->config['dayMaxEvents'],
+            'weekends' => $this->config['weekends'],
+            'snapDuration' => $this->config['snapDuration'],
+            'timeInterval' => $this->config['timeInterval']
+        ];
+        
+        ?>
+        <div class="<?php echo htmlspecialchars($this->config['classes']['calendar']); ?>">
+            <div id="<?php echo htmlspecialchars($this->elementId); ?>"
+                 data-component="calendar"
+                 data-component-id="<?php echo htmlspecialchars($this->elementId); ?>"
+                 data-config='<?php echo json_encode($calendarConfig, JSON_HEX_APOS | JSON_HEX_QUOT); ?>'
+                 data-events='<?php echo json_encode($this->events, JSON_HEX_APOS | JSON_HEX_QUOT); ?>'
+                 data-users='<?php echo json_encode($this->users, JSON_HEX_APOS | JSON_HEX_QUOT); ?>'
+                 data-current-user='<?php echo json_encode($this->currentUser, JSON_HEX_APOS | JSON_HEX_QUOT); ?>'
+                 data-permissions='<?php echo json_encode($this->config['permissions'], JSON_HEX_APOS | JSON_HEX_QUOT); ?>'
+                 data-real-time="<?php echo $this->config['realTime'] ? 'true' : 'false'; ?>"
+                 data-sse-enabled="<?php echo $this->config['sseEnabled'] ? 'true' : 'false'; ?>"
+                 <?php if ($this->config['apiEndpoints']['events']): ?>
+                     data-api-url="<?php echo htmlspecialchars($this->config['apiEndpoints']['events']); ?>"
+                 <?php endif; ?>
+                 <?php if ($this->config['apiEndpoints']['sse']): ?>
+                     data-sse-url="<?php echo htmlspecialchars($this->config['apiEndpoints']['sse']); ?>"
+                 <?php endif; ?>
+                 data-modal-target="#<?php echo htmlspecialchars($this->modalId); ?>"
+                 data-auto-init="true">
+            </div>
+        </div>
+        <?php
+    }
+    
+    /**
+     * Render event modal with data attributes
      */
     private function renderEventModal() {
+        $modalConfig = [
+            'size' => 'medium',
+            'backdrop' => 'static',
+            'keyboard' => true,
+            'closeOnEscape' => true
+        ];
+        
         ?>
-        <div id="<?php echo htmlspecialchars($this->modalId); ?>" class="modal">
+        <div id="<?php echo htmlspecialchars($this->modalId); ?>" 
+             class="modal"
+             data-component="modal"
+             data-component-id="<?php echo htmlspecialchars($this->modalId); ?>"
+             data-modal-type="event"
+             data-config='<?php echo json_encode($modalConfig, JSON_HEX_APOS | JSON_HEX_QUOT); ?>'
+             data-target="#<?php echo htmlspecialchars($this->elementId); ?>"
+             data-auto-init="true">
+            
             <div class="modal-content">
                 <div class="modal-header">
-                    <h2 id="<?php echo $this->modalId; ?>Title">Event Details</h2>
-                    <span class="close">&times;</span>
+                    <h2 id="<?php echo $this->modalId; ?>Title" 
+                        data-component="modal-title">
+                        Event Details
+                    </h2>
+                    <span class="close" 
+                          data-action="close-modal"
+                          data-target="#<?php echo htmlspecialchars($this->modalId); ?>">&times;</span>
                 </div>
+                
                 <div class="modal-body">
-                    <form id="<?php echo $this->modalId; ?>Form">
+                    <form id="<?php echo $this->modalId; ?>Form"
+                          data-component="form"
+                          data-component-id="<?php echo $this->modalId; ?>-form"
+                          data-validation="client"
+                          data-submit-method="POST"
+                          data-permissions='<?php echo json_encode($this->config['permissions'], JSON_HEX_APOS | JSON_HEX_QUOT); ?>'
+                          data-auto-init="true">
+                        
                         <div class="form-group">
-                            <label for="<?php echo $this->modalId; ?>EventTitle">Event Title</label>
+                            <label for="<?php echo $this->modalId; ?>EventTitle">
+                                Event Title *
+                            </label>
                             <input 
                                 type="text" 
                                 id="<?php echo $this->modalId; ?>EventTitle" 
+                                name="title"
                                 placeholder="Enter event title..." 
+                                class="form-control"
+                                data-validate="required|minlength:3"
+                                data-validate-message="Event title is required (minimum 3 characters)"
                                 required
                             >
                         </div>
+                        
                         <div class="form-row">
                             <div class="form-group">
-                                <label for="<?php echo $this->modalId; ?>EventStart">Start Date & Time</label>
+                                <label for="<?php echo $this->modalId; ?>EventStart">
+                                    Start Date & Time *
+                                </label>
                                 <input 
                                     type="text" 
                                     id="<?php echo $this->modalId; ?>EventStart" 
+                                    name="start"
                                     placeholder="Select start date & time..." 
-                                    required 
+                                    class="form-control datetime-picker"
+                                    data-validate="required"
+                                    data-validate-message="Start date and time is required"
                                     readonly
+                                    required
                                 >
                             </div>
+                            
                             <div class="form-group">
-                                <label for="<?php echo $this->modalId; ?>EventEnd">End Date & Time</label>
+                                <label for="<?php echo $this->modalId; ?>EventEnd">
+                                    End Date & Time *
+                                </label>
                                 <input 
                                     type="text" 
                                     id="<?php echo $this->modalId; ?>EventEnd" 
+                                    name="end"
                                     placeholder="Select end date & time..." 
-                                    required 
+                                    class="form-control datetime-picker"
+                                    data-validate="required"
+                                    data-validate-message="End date and time is required"
                                     readonly
+                                    required
                                 >
                             </div>
                         </div>
+                        
                         <div class="form-actions">
-                            <button type="submit" class="btn btn-primary">Save Event</button>
+                            <button type="submit" 
+                                    class="btn btn-primary"
+                                    data-component="button"
+                                    data-action="save-event">
+                                Save Event
+                            </button>
+                            
                             <?php if ($this->config['permissions']['canDelete']): ?>
                                 <button 
                                     type="button" 
                                     id="<?php echo $this->modalId; ?>DeleteBtn" 
                                     class="btn btn-danger" 
                                     style="display: none;"
+                                    data-component="button"
+                                    data-action="delete-event"
+                                    data-confirm="Are you sure you want to delete this event?"
                                 >
                                     Delete Event
                                 </button>
                             <?php endif; ?>
-                            <button type="button" class="btn btn-outline modal-cancel">Cancel</button>
+                            
+                            <button type="button" 
+                                    class="btn btn-outline modal-cancel"
+                                    data-action="close-modal"
+                                    data-target="#<?php echo htmlspecialchars($this->modalId); ?>">
+                                Cancel
+                            </button>
                         </div>
                     </form>
                 </div>
@@ -300,385 +439,41 @@ class Calendar {
     }
     
     /**
-     * Generate FullCalendar JavaScript
+     * Set API endpoints
      */
-    private function generateCalendarJs() {
-        $calendarId = $this->elementId;
-        $modalId = $this->modalId;
-        $config = json_encode($this->config);
-        $events = json_encode($this->events);
-        $users = json_encode($this->users);
-        $currentUser = json_encode($this->currentUser);
+    public function setApiEndpoints($endpoints) {
+        $this->config['apiEndpoints'] = array_merge($this->config['apiEndpoints'], $endpoints);
+        return $this;
+    }
+    
+    /**
+     * Set permissions
+     */
+    public function setPermissions($permissions) {
+        $this->config['permissions'] = array_merge($this->config['permissions'], $permissions);
+        return $this;
+    }
+    
+    /**
+     * Enable/disable real-time features
+     */
+    public function setRealTime($enabled, $sseUrl = null) {
+        $this->config['realTime'] = $enabled;
+        $this->config['sseEnabled'] = $enabled;
         
-        return "
-        // Initialize Calendar Component: {$calendarId}
-        (function() {
-            const calendarEl = document.getElementById('{$calendarId}');
-            const modalEl = document.getElementById('{$modalId}');
-            const config = {$config};
-            const initialEvents = {$events};
-            const users = {$users};
-            const currentUser = {$currentUser};
-            
-            let calendar;
-            let currentEvent = null;
-            
-            // Initialize FullCalendar
-            if (calendarEl) {
-                calendar = new FullCalendar.Calendar(calendarEl, {
-                    initialView: config.view,
-                    height: config.height,
-                    headerToolbar: config.headerToolbar,
-                    
-                    // Interaction settings
-                    editable: config.editable,
-                    selectable: config.selectable,
-                    selectMirror: config.selectMirror,
-                    eventStartEditable: config.eventStartEditable,
-                    eventDurationEditable: config.eventDurationEditable,
-                    eventResizableFromStart: config.eventResizableFromStart,
-                    
-                    // Display settings
-                    dayMaxEvents: config.dayMaxEvents,
-                    weekends: config.weekends,
-                    snapDuration: config.snapDuration,
-                    
-                    // Events
-                    events: initialEvents,
-                    
-                    // Event handlers
-                    select: function(info) {
-                        if (config.permissions.canCreate) {
-                            openEventModal({
-                                start: info.startStr,
-                                end: info.endStr
-                            });
-                        }
-                        calendar.unselect();
-                    },
-                    
-                    eventClick: function(info) {
-                        const event = info.event;
-                        const canEdit = event.extendedProps.canEdit || !config.permissions.editOwnOnly;
-                        
-                        if (canEdit) {
-                            openEventModal({
-                                id: event.id,
-                                title: event.title,
-                                start: event.startStr,
-                                end: event.endStr || event.startStr
-                            });
-                        } else {
-                            showMessage('You can only edit your own events', 'warning');
-                        }
-                    },
-                    
-                    eventDrop: function(info) {
-                        const event = info.event;
-                        if (!event.extendedProps.canEdit && config.permissions.editOwnOnly) {
-                            info.revert();
-                            showMessage('You can only move your own events', 'error');
-                            return;
-                        }
-                        
-                        updateEventOnServer(event);
-                    },
-                    
-                    eventResize: function(info) {
-                        const event = info.event;
-                        if (!event.extendedProps.canEdit && config.permissions.editOwnOnly) {
-                            info.revert();
-                            showMessage('You can only resize your own events', 'error');
-                            return;
-                        }
-                        
-                        updateEventOnServer(event);
-                    },
-                    
-                    eventMouseEnter: function(info) {
-                        const canEdit = info.event.extendedProps.canEdit || !config.permissions.editOwnOnly;
-                        info.el.style.cursor = canEdit ? 'pointer' : 'not-allowed';
-                    }
-                });
-                
-                calendar.render();
-            }
-            
-            // Modal functions
-            function openEventModal(eventData = {}) {
-                if (!modalEl) return;
-                
-                currentEvent = eventData;
-                
-                // Set form values
-                document.getElementById('{$modalId}EventTitle').value = eventData.title || '';
-                
-                // Initialize datetime pickers if available
-                if (typeof jQuery !== 'undefined' && jQuery.fn.datetimepicker) {
-                    initializeDateTimePickers();
-                }
-                
-                setDateTimeValues(eventData.start, eventData.end);
-                
-                // Update modal state
-                const modalTitle = document.getElementById('{$modalId}Title');
-                const deleteBtn = document.getElementById('{$modalId}DeleteBtn');
-                
-                if (eventData.id) {
-                    modalTitle.textContent = 'Edit Event';
-                    if (deleteBtn) deleteBtn.style.display = 'inline-block';
-                } else {
-                    modalTitle.textContent = 'Add Event';
-                    if (deleteBtn) deleteBtn.style.display = 'none';
-                }
-                
-                modalEl.style.display = 'block';
-                document.getElementById('{$modalId}EventTitle').focus();
-            }
-            
-            function closeEventModal() {
-                if (modalEl) {
-                    modalEl.style.display = 'none';
-                }
-                currentEvent = null;
-            }
-            
-            function initializeDateTimePickers() {
-                const options = {
-                    format: 'Y-m-d H:i',
-                    step: config.timeInterval || 15,
-                    timepicker: true,
-                    datepicker: true,
-                    closeOnDateSelect: false,
-                    closeOnTimeSelect: true
-                };
-                
-                jQuery('#{$modalId}EventStart, #{$modalId}EventEnd').datetimepicker(options);
-            }
-            
-            function setDateTimeValues(start, end) {
-                const startInput = document.getElementById('{$modalId}EventStart');
-                const endInput = document.getElementById('{$modalId}EventEnd');
-                
-                if (start && startInput) {
-                    if (typeof jQuery !== 'undefined' && jQuery.fn.datetimepicker) {
-                        jQuery(startInput).datetimepicker('setOptions', { value: new Date(start) });
-                    } else {
-                        startInput.value = formatDateTimeLocal(start);
-                    }
-                }
-                
-                if (end && endInput) {
-                    if (typeof jQuery !== 'undefined' && jQuery.fn.datetimepicker) {
-                        jQuery(endInput).datetimepicker('setOptions', { value: new Date(end) });
-                    } else {
-                        endInput.value = formatDateTimeLocal(end);
-                    }
-                }
-            }
-            
-            function formatDateTimeLocal(dateTimeStr) {
-                const date = new Date(dateTimeStr);
-                const year = date.getFullYear();
-                const month = String(date.getMonth() + 1).padStart(2, '0');
-                const day = String(date.getDate()).padStart(2, '0');
-                const hours = String(date.getHours()).padStart(2, '0');
-                const minutes = String(date.getMinutes()).padStart(2, '0');
-                return year + '-' + month + '-' + day + 'T' + hours + ':' + minutes;
-            }
-            
-            function updateEventOnServer(event) {
-                const eventData = {
-                    id: event.id,
-                    title: event.title,
-                    start: event.startStr,
-                    end: event.endStr || event.startStr
-                };
-                
-                // Use global API client if available
-                if (window.CalendarAPI && window.CalendarAPI.updateEvent) {
-                    window.CalendarAPI.updateEvent(eventData)
-                        .then(() => showMessage('Event updated successfully', 'success'))
-                        .catch(error => showMessage('Failed to update event: ' + error.message, 'error'));
-                } else {
-                    console.log('Event update:', eventData);
-                }
-            }
-            
-            function showMessage(message, type = 'info') {
-                if (window.showNotification) {
-                    window.showNotification(message, type);
-                } else {
-                    console.log(type.toUpperCase() + ': ' + message);
-                }
-            }
-            
-            // User filter handling
-            const userCheckboxes = document.querySelectorAll('#{$calendarId}UserCheckboxes input[type=\"checkbox\"]');
-            userCheckboxes.forEach(function(checkbox) {
-                checkbox.addEventListener('change', function() {
-                    const checkboxItem = this.closest('.checkbox-item');
-                    
-                    if (this.checked) {
-                        checkboxItem.classList.add('checked');
-                    } else {
-                        checkboxItem.classList.remove('checked');
-                    }
-                    
-                    // Filter events based on selected users
-                    filterEventsByUsers();
-                });
-            });
-            
-            function filterEventsByUsers() {
-                const selectedUserIds = Array.from(userCheckboxes)
-                    .filter(cb => cb.checked)
-                    .map(cb => parseInt(cb.value));
-                
-                // Filter events and refresh calendar
-                const filteredEvents = initialEvents.filter(event => 
-                    selectedUserIds.length === 0 || 
-                    selectedUserIds.includes(event.extendedProps.userId)
-                );
-                
-                if (calendar) {
-                    calendar.removeAllEvents();
-                    calendar.addEventSource(filteredEvents);
-                }
-            }
-            
-            // Modal event listeners
-            if (modalEl) {
-                // Close modal
-                modalEl.addEventListener('click', function(e) {
-                    if (e.target === modalEl || e.target.classList.contains('close') || e.target.classList.contains('modal-cancel')) {
-                        closeEventModal();
-                    }
-                });
-                
-                // Form submission
-                const modalForm = document.getElementById('{$modalId}Form');
-                if (modalForm) {
-                    modalForm.addEventListener('submit', function(e) {
-                        e.preventDefault();
-                        saveEvent();
-                    });
-                }
-                
-                // Delete button
-                const deleteBtn = document.getElementById('{$modalId}DeleteBtn');
-                if (deleteBtn) {
-                    deleteBtn.addEventListener('click', function() {
-                        if (currentEvent && currentEvent.id && confirm('Are you sure you want to delete this event?')) {
-                            deleteEvent(currentEvent.id);
-                        }
-                    });
-                }
-            }
-            
-            // Add event button
-            const addEventBtn = document.getElementById('{$calendarId}AddEvent');
-            if (addEventBtn) {
-                addEventBtn.addEventListener('click', function() {
-                    openEventModal();
-                });
-            }
-            
-            // Refresh users button
-            const refreshBtn = document.getElementById('{$calendarId}RefreshUsers');
-            if (refreshBtn) {
-                refreshBtn.addEventListener('click', function() {
-                    if (window.CalendarAPI && window.CalendarAPI.refreshUsers) {
-                        window.CalendarAPI.refreshUsers();
-                    } else {
-                        window.location.reload();
-                    }
-                });
-            }
-            
-            function saveEvent() {
-                const title = document.getElementById('{$modalId}EventTitle').value.trim();
-                const start = document.getElementById('{$modalId}EventStart').value;
-                const end = document.getElementById('{$modalId}EventEnd').value;
-                
-                if (!title || !start) {
-                    showMessage('Please fill in all required fields', 'error');
-                    return;
-                }
-                
-                const eventData = {
-                    title: title,
-                    start: start,
-                    end: end || start
-                };
-                
-                if (currentEvent && currentEvent.id) {
-                    eventData.id = currentEvent.id;
-                }
-                
-                // Use global API client if available
-                if (window.CalendarAPI) {
-                    const apiCall = currentEvent && currentEvent.id 
-                        ? window.CalendarAPI.updateEvent(eventData)
-                        : window.CalendarAPI.createEvent(eventData);
-                    
-                    apiCall
-                        .then(() => {
-                            showMessage('Event saved successfully', 'success');
-                            closeEventModal();
-                            // Refresh calendar
-                            if (window.CalendarAPI.refreshEvents) {
-                                window.CalendarAPI.refreshEvents();
-                            }
-                        })
-                        .catch(error => showMessage('Failed to save event: ' + error.message, 'error'));
-                } else {
-                    console.log('Save event:', eventData);
-                    closeEventModal();
-                }
-            }
-            
-            function deleteEvent(eventId) {
-                if (window.CalendarAPI && window.CalendarAPI.deleteEvent) {
-                    window.CalendarAPI.deleteEvent(eventId)
-                        .then(() => {
-                            showMessage('Event deleted successfully', 'success');
-                            closeEventModal();
-                            if (window.CalendarAPI.refreshEvents) {
-                                window.CalendarAPI.refreshEvents();
-                            }
-                        })
-                        .catch(error => showMessage('Failed to delete event: ' + error.message, 'error'));
-                } else {
-                    console.log('Delete event:', eventId);
-                    closeEventModal();
-                }
-            }
-            
-            // Expose calendar instance for external access
-            window['{$calendarId}Instance'] = {
-                calendar: calendar,
-                openModal: openEventModal,
-                closeModal: closeEventModal,
-                refresh: function() {
-                    if (calendar) calendar.refetchEvents();
-                },
-                addEvent: function(event) {
-                    if (calendar) calendar.addEvent(event);
-                },
-                removeEvent: function(eventId) {
-                    const event = calendar.getEventById(eventId);
-                    if (event) event.remove();
-                },
-                getSelectedUsers: function() {
-                    return Array.from(userCheckboxes)
-                        .filter(cb => cb.checked)
-                        .map(cb => parseInt(cb.value));
-                }
-            };
-            
-        })();
-        ";
+        if ($sseUrl) {
+            $this->config['apiEndpoints']['sse'] = $sseUrl;
+        }
+        
+        return $this;
+    }
+    
+    /**
+     * Set CSS classes
+     */
+    public function setClasses($classes) {
+        $this->config['classes'] = array_merge($this->config['classes'], $classes);
+        return $this;
     }
     
     /**
@@ -695,5 +490,20 @@ class Calendar {
         $calendar = new self($config);
         $calendar->setData($events, $users, $currentUser);
         $calendar->render();
+    }
+    
+    /**
+     * Render minimal calendar (just the calendar, no controls)
+     */
+    public static function renderMinimal($elementId, $events = [], $config = []) {
+        $defaultConfig = [
+            'elementId' => $elementId,
+            'showUserFilters' => false,
+            'showEventModal' => false
+        ];
+        
+        $calendar = new self(array_merge($defaultConfig, $config));
+        $calendar->setData($events, [], null);
+        $calendar->renderCalendarContainer();
     }
 }

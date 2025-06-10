@@ -1,9 +1,10 @@
 <?php
 /**
- * Event Modal Component - Reusable event creation/editing modal
+ * Event Modal Component - REFACTORED (HTML Generation Only)
  * Location: frontend/components/calendar/EventModal.php
  * 
- * Configurable modal for event CRUD operations
+ * Generates semantic HTML with data attributes for JavaScript initialization
+ * All behavior and modal logic handled by JavaScript
  */
 
 class EventModal {
@@ -16,6 +17,11 @@ class EventModal {
      */
     private $defaultConfig = [
         'modalId' => 'eventModal',
+        'size' => 'medium',
+        'backdrop' => 'static',
+        'keyboard' => true,
+        'closeOnEscape' => true,
+        'autoShow' => false,
         'title' => [
             'create' => 'Add Event',
             'edit' => 'Edit Event',
@@ -26,25 +32,28 @@ class EventModal {
                 'type' => 'text',
                 'label' => 'Event Title',
                 'required' => true,
-                'placeholder' => 'Enter event title...'
+                'placeholder' => 'Enter event title...',
+                'validation' => 'required|minlength:3'
             ],
             'start' => [
                 'type' => 'datetime',
                 'label' => 'Start Date & Time',
                 'required' => true,
-                'placeholder' => 'Select start date & time...'
+                'placeholder' => 'Select start date & time...',
+                'validation' => 'required'
             ],
             'end' => [
                 'type' => 'datetime',
                 'label' => 'End Date & Time',
-                'required' => false,
-                'placeholder' => 'Select end date & time...'
+                'required' => true,
+                'placeholder' => 'Select end date & time...',
+                'validation' => 'required'
             ],
             'description' => [
                 'type' => 'textarea',
                 'label' => 'Description',
                 'required' => false,
-                'placeholder' => 'Event description...',
+                'placeholder' => 'Event description (optional)...',
                 'rows' => 3
             ]
         ],
@@ -52,18 +61,22 @@ class EventModal {
             'save' => [
                 'text' => 'Save Event',
                 'class' => 'btn btn-primary',
-                'type' => 'submit'
+                'type' => 'submit',
+                'action' => 'save-event'
             ],
             'delete' => [
                 'text' => 'Delete Event',
                 'class' => 'btn btn-danger',
                 'type' => 'button',
-                'showOnEdit' => true
+                'action' => 'delete-event',
+                'showOnEdit' => true,
+                'confirm' => 'Are you sure you want to delete this event?'
             ],
             'cancel' => [
                 'text' => 'Cancel',
                 'class' => 'btn btn-outline',
-                'type' => 'button'
+                'type' => 'button',
+                'action' => 'close-modal'
             ]
         ],
         'permissions' => [
@@ -74,14 +87,18 @@ class EventModal {
         ],
         'validation' => [
             'clientSide' => true,
-            'serverSide' => true
+            'serverSide' => true,
+            'realTime' => false
         ],
-        'dateTimePicker' => [
-            'enabled' => true,
-            'format' => 'Y-m-d H:i',
-            'step' => 15,
-            'minDate' => false,
-            'maxDate' => false
+        'classes' => [
+            'modal' => 'modal event-modal',
+            'content' => 'modal-content',
+            'header' => 'modal-header',
+            'body' => 'modal-body',
+            'footer' => 'modal-footer',
+            'form' => 'event-form',
+            'viewMode' => 'modal-view-mode',
+            'editMode' => 'modal-edit-mode'
         ]
     ];
     
@@ -95,25 +112,37 @@ class EventModal {
     }
     
     /**
-     * Render the modal HTML
+     * Render the modal HTML with data attributes
      */
     public function render() {
+        $modalConfig = [
+            'size' => $this->config['size'],
+            'backdrop' => $this->config['backdrop'],
+            'keyboard' => $this->config['keyboard'],
+            'closeOnEscape' => $this->config['closeOnEscape'],
+            'autoShow' => $this->config['autoShow']
+        ];
+        
         ?>
-        <div id="<?php echo htmlspecialchars($this->modalId); ?>" class="modal event-modal">
-            <div class="modal-content">
+        <div id="<?php echo htmlspecialchars($this->modalId); ?>" 
+             class="<?php echo htmlspecialchars($this->config['classes']['modal']); ?>"
+             data-component="modal"
+             data-component-id="<?php echo htmlspecialchars($this->modalId); ?>"
+             data-modal-type="event"
+             data-config='<?php echo json_encode($modalConfig, JSON_HEX_APOS | JSON_HEX_QUOT); ?>'
+             data-permissions='<?php echo json_encode($this->config['permissions'], JSON_HEX_APOS | JSON_HEX_QUOT); ?>'
+             data-validation='<?php echo json_encode($this->config['validation'], JSON_HEX_APOS | JSON_HEX_QUOT); ?>'
+             data-auto-init="true">
+            
+            <div class="<?php echo htmlspecialchars($this->config['classes']['content']); ?>">
                 <?php $this->renderHeader(); ?>
-                <div class="modal-body">
+                
+                <div class="<?php echo htmlspecialchars($this->config['classes']['body']); ?>">
                     <?php $this->renderViewMode(); ?>
                     <?php $this->renderEditMode(); ?>
                 </div>
             </div>
         </div>
-        
-        <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            <?php echo $this->generateModalJs(); ?>
-        });
-        </script>
         <?php
     }
     
@@ -122,11 +151,15 @@ class EventModal {
      */
     private function renderHeader() {
         ?>
-        <div class="modal-header">
-            <h2 id="<?php echo $this->modalId; ?>Title">
+        <div class="<?php echo htmlspecialchars($this->config['classes']['header']); ?>">
+            <h2 id="<?php echo $this->modalId; ?>Title"
+                data-component="modal-title"
+                data-titles='<?php echo json_encode($this->config['title'], JSON_HEX_APOS | JSON_HEX_QUOT); ?>'>
                 <?php echo htmlspecialchars($this->config['title']['create']); ?>
             </h2>
-            <span class="close modal-close">&times;</span>
+            <span class="close modal-close"
+                  data-action="close-modal"
+                  data-target="#<?php echo htmlspecialchars($this->modalId); ?>">&times;</span>
         </div>
         <?php
     }
@@ -136,52 +169,87 @@ class EventModal {
      */
     private function renderViewMode() {
         ?>
-        <div id="<?php echo $this->modalId; ?>ViewMode" class="modal-view-mode" style="display: none;">
+        <div id="<?php echo $this->modalId; ?>ViewMode" 
+             class="<?php echo htmlspecialchars($this->config['classes']['viewMode']); ?>" 
+             style="display: none;"
+             data-component="modal-view"
+             data-component-id="<?php echo $this->modalId; ?>-view">
+            
             <div class="event-details">
                 <div class="detail-grid">
                     <div class="detail-row">
                         <label>Title:</label>
-                        <span id="<?php echo $this->modalId; ?>ViewTitle">-</span>
+                        <span id="<?php echo $this->modalId; ?>ViewTitle" 
+                              data-field="title">-</span>
                     </div>
                     <div class="detail-row">
                         <label>Start:</label>
-                        <span id="<?php echo $this->modalId; ?>ViewStart">-</span>
+                        <span id="<?php echo $this->modalId; ?>ViewStart" 
+                              data-field="start"
+                              data-format="datetime">-</span>
                     </div>
                     <div class="detail-row">
                         <label>End:</label>
-                        <span id="<?php echo $this->modalId; ?>ViewEnd">-</span>
+                        <span id="<?php echo $this->modalId; ?>ViewEnd" 
+                              data-field="end"
+                              data-format="datetime">-</span>
                     </div>
                     <div class="detail-row">
                         <label>Duration:</label>
-                        <span id="<?php echo $this->modalId; ?>ViewDuration">-</span>
+                        <span id="<?php echo $this->modalId; ?>ViewDuration" 
+                              data-field="duration"
+                              data-format="duration">-</span>
                     </div>
                     <div class="detail-row">
                         <label>Owner:</label>
-                        <span id="<?php echo $this->modalId; ?>ViewOwner">-</span>
+                        <span id="<?php echo $this->modalId; ?>ViewOwner" 
+                              data-field="owner">-</span>
                     </div>
                     <?php if (isset($this->formFields['description'])): ?>
                         <div class="detail-row">
                             <label>Description:</label>
-                            <span id="<?php echo $this->modalId; ?>ViewDescription">-</span>
+                            <span id="<?php echo $this->modalId; ?>ViewDescription" 
+                                  data-field="description">-</span>
                         </div>
                     <?php endif; ?>
+                    <div class="detail-row">
+                        <label>Status:</label>
+                        <span id="<?php echo $this->modalId; ?>ViewStatus" 
+                              data-field="status"
+                              data-format="status">-</span>
+                    </div>
                 </div>
             </div>
             
             <div class="modal-actions">
                 <?php if ($this->config['permissions']['canEdit']): ?>
-                    <button type="button" id="<?php echo $this->modalId; ?>EditBtn" class="btn btn-primary">
+                    <button type="button" 
+                            id="<?php echo $this->modalId; ?>EditBtn" 
+                            class="btn btn-primary"
+                            data-component="button"
+                            data-action="switch-to-edit"
+                            data-target="#<?php echo $this->modalId; ?>">
                         ✏️ Edit Event
                     </button>
                 <?php endif; ?>
                 
                 <?php if ($this->config['permissions']['canDelete']): ?>
-                    <button type="button" id="<?php echo $this->modalId; ?>DeleteFromViewBtn" class="btn btn-danger">
+                    <button type="button" 
+                            id="<?php echo $this->modalId; ?>DeleteFromViewBtn" 
+                            class="btn btn-danger"
+                            data-component="button"
+                            data-action="delete-event"
+                            data-confirm="Are you sure you want to delete this event?">
                         🗑️ Delete Event
                     </button>
                 <?php endif; ?>
                 
-                <button type="button" class="btn btn-outline modal-close">Close</button>
+                <button type="button" 
+                        class="btn btn-outline modal-close"
+                        data-action="close-modal"
+                        data-target="#<?php echo htmlspecialchars($this->modalId); ?>">
+                    Close
+                </button>
             </div>
         </div>
         <?php
@@ -192,8 +260,20 @@ class EventModal {
      */
     private function renderEditMode() {
         ?>
-        <div id="<?php echo $this->modalId; ?>EditMode" class="modal-edit-mode">
-            <form id="<?php echo $this->modalId; ?>Form" novalidate>
+        <div id="<?php echo $this->modalId; ?>EditMode" 
+             class="<?php echo htmlspecialchars($this->config['classes']['editMode']); ?>"
+             data-component="modal-edit"
+             data-component-id="<?php echo $this->modalId; ?>-edit">
+            
+            <form id="<?php echo $this->modalId; ?>Form"
+                  class="<?php echo htmlspecialchars($this->config['classes']['form']); ?>"
+                  data-component="form"
+                  data-component-id="<?php echo $this->modalId; ?>-form"
+                  data-validation='<?php echo json_encode($this->config['validation'], JSON_HEX_APOS | JSON_HEX_QUOT); ?>'
+                  data-submit-method="POST"
+                  data-auto-init="true"
+                  novalidate>
+                
                 <?php $this->renderFormFields(); ?>
                 <?php $this->renderFormActions(); ?>
             </form>
@@ -219,6 +299,12 @@ class EventModal {
         $requiredAttr = $required ? 'required' : '';
         $requiredMark = $required ? ' *' : '';
         
+        // Build validation attributes
+        $validationAttr = '';
+        if (!empty($fieldConfig['validation'])) {
+            $validationAttr = 'data-validate="' . htmlspecialchars($fieldConfig['validation']) . '"';
+        }
+        
         ?>
         <div class="form-group">
             <label for="<?php echo htmlspecialchars($fieldId); ?>">
@@ -228,16 +314,16 @@ class EventModal {
             <?php
             switch ($fieldConfig['type']) {
                 case 'textarea':
-                    $this->renderTextarea($fieldId, $fieldConfig, $requiredAttr);
+                    $this->renderTextarea($fieldId, $fieldConfig, $requiredAttr, $validationAttr);
                     break;
                 case 'datetime':
-                    $this->renderDateTimeInput($fieldId, $fieldConfig, $requiredAttr);
+                    $this->renderDateTimeInput($fieldId, $fieldConfig, $requiredAttr, $validationAttr);
                     break;
                 case 'select':
-                    $this->renderSelect($fieldId, $fieldConfig, $requiredAttr);
+                    $this->renderSelect($fieldId, $fieldConfig, $requiredAttr, $validationAttr);
                     break;
                 default:
-                    $this->renderTextInput($fieldId, $fieldConfig, $requiredAttr);
+                    $this->renderTextInput($fieldId, $fieldConfig, $requiredAttr, $validationAttr);
                     break;
             }
             ?>
@@ -245,6 +331,10 @@ class EventModal {
             <?php if (isset($fieldConfig['help'])): ?>
                 <small class="form-help"><?php echo htmlspecialchars($fieldConfig['help']); ?></small>
             <?php endif; ?>
+            
+            <div class="form-error" 
+                 id="<?php echo htmlspecialchars($fieldId); ?>Error"
+                 style="display: none;"></div>
         </div>
         <?php
     }
@@ -252,17 +342,20 @@ class EventModal {
     /**
      * Render text input
      */
-    private function renderTextInput($fieldId, $fieldConfig, $requiredAttr) {
+    private function renderTextInput($fieldId, $fieldConfig, $requiredAttr, $validationAttr) {
         ?>
         <input 
             type="<?php echo htmlspecialchars($fieldConfig['inputType'] ?? 'text'); ?>"
             id="<?php echo htmlspecialchars($fieldId); ?>"
+            name="<?php echo htmlspecialchars(strtolower(str_replace($this->modalId, '', $fieldId))); ?>"
             placeholder="<?php echo htmlspecialchars($fieldConfig['placeholder'] ?? ''); ?>"
             class="form-control"
             <?php echo $requiredAttr; ?>
+            <?php echo $validationAttr; ?>
             <?php if (isset($fieldConfig['maxlength'])): ?>
                 maxlength="<?php echo intval($fieldConfig['maxlength']); ?>"
             <?php endif; ?>
+            data-field-type="text"
         >
         <?php
     }
@@ -270,14 +363,17 @@ class EventModal {
     /**
      * Render textarea
      */
-    private function renderTextarea($fieldId, $fieldConfig, $requiredAttr) {
+    private function renderTextarea($fieldId, $fieldConfig, $requiredAttr, $validationAttr) {
         ?>
         <textarea 
             id="<?php echo htmlspecialchars($fieldId); ?>"
+            name="<?php echo htmlspecialchars(strtolower(str_replace($this->modalId, '', $fieldId))); ?>"
             placeholder="<?php echo htmlspecialchars($fieldConfig['placeholder'] ?? ''); ?>"
             class="form-control"
             rows="<?php echo intval($fieldConfig['rows'] ?? 3); ?>"
             <?php echo $requiredAttr; ?>
+            <?php echo $validationAttr; ?>
+            data-field-type="textarea"
         ></textarea>
         <?php
     }
@@ -285,16 +381,19 @@ class EventModal {
     /**
      * Render datetime input
      */
-    private function renderDateTimeInput($fieldId, $fieldConfig, $requiredAttr) {
-        $readonly = $this->config['dateTimePicker']['enabled'] ? 'readonly' : '';
+    private function renderDateTimeInput($fieldId, $fieldConfig, $requiredAttr, $validationAttr) {
         ?>
         <input 
             type="text"
             id="<?php echo htmlspecialchars($fieldId); ?>"
+            name="<?php echo htmlspecialchars(strtolower(str_replace($this->modalId, '', $fieldId))); ?>"
             placeholder="<?php echo htmlspecialchars($fieldConfig['placeholder'] ?? ''); ?>"
             class="form-control datetime-picker"
             <?php echo $requiredAttr; ?>
-            <?php echo $readonly; ?>
+            <?php echo $validationAttr; ?>
+            data-field-type="datetime"
+            data-datetime-config='{"format": "Y-m-d H:i", "step": 15}'
+            readonly
         >
         <?php
     }
@@ -302,12 +401,15 @@ class EventModal {
     /**
      * Render select dropdown
      */
-    private function renderSelect($fieldId, $fieldConfig, $requiredAttr) {
+    private function renderSelect($fieldId, $fieldConfig, $requiredAttr, $validationAttr) {
         ?>
         <select 
             id="<?php echo htmlspecialchars($fieldId); ?>"
+            name="<?php echo htmlspecialchars(strtolower(str_replace($this->modalId, '', $fieldId))); ?>"
             class="form-control"
             <?php echo $requiredAttr; ?>
+            <?php echo $validationAttr; ?>
+            data-field-type="select"
         >
             <?php if (isset($fieldConfig['placeholder'])): ?>
                 <option value=""><?php echo htmlspecialchars($fieldConfig['placeholder']); ?></option>
@@ -353,6 +455,12 @@ class EventModal {
             type="<?php echo htmlspecialchars($buttonConfig['type']); ?>"
             id="<?php echo htmlspecialchars($buttonId); ?>"
             class="<?php echo htmlspecialchars($buttonConfig['class']); ?>"
+            data-component="button"
+            data-action="<?php echo htmlspecialchars($buttonConfig['action']); ?>"
+            data-target="#<?php echo htmlspecialchars($this->modalId); ?>"
+            <?php if (isset($buttonConfig['confirm'])): ?>
+                data-confirm="<?php echo htmlspecialchars($buttonConfig['confirm']); ?>"
+            <?php endif; ?>
             <?php echo $style; ?>
         >
             <?php echo htmlspecialchars($buttonConfig['text']); ?>
@@ -361,335 +469,53 @@ class EventModal {
     }
     
     /**
-     * Generate modal JavaScript
+     * Set modal configuration
      */
-    private function generateModalJs() {
-        $modalId = $this->modalId;
-        $config = json_encode($this->config);
-        
-        return "
-        // Initialize Event Modal: {$modalId}
-        (function() {
-            const modalEl = document.getElementById('{$modalId}');
-            const config = {$config};
-            let currentEvent = null;
-            let isEditMode = false;
-            
-            // Modal state management
-            function openModal(eventData = {}, mode = 'create') {
-                if (!modalEl) return;
-                
-                currentEvent = eventData;
-                isEditMode = mode === 'edit' || mode === 'view';
-                
-                // Update modal title
-                const titleEl = document.getElementById('{$modalId}Title');
-                if (titleEl) {
-                    const titleKey = mode === 'view' ? 'view' : (mode === 'edit' ? 'edit' : 'create');
-                    titleEl.textContent = config.title[titleKey] || config.title.create;
-                }
-                
-                if (mode === 'view') {
-                    showViewMode(eventData);
-                } else {
-                    showEditMode(eventData, mode === 'edit');
-                }
-                
-                modalEl.style.display = 'block';
-                
-                // Focus first input in edit mode
-                if (mode !== 'view') {
-                    const firstInput = modalEl.querySelector('input:not([readonly]), textarea, select');
-                    if (firstInput) {
-                        setTimeout(() => firstInput.focus(), 100);
-                    }
-                }
-            }
-            
-            function closeModal() {
-                if (modalEl) {
-                    modalEl.style.display = 'none';
-                }
-                currentEvent = null;
-                isEditMode = false;
-                clearForm();
-            }
-            
-            function showViewMode(eventData) {
-                const viewMode = document.getElementById('{$modalId}ViewMode');
-                const editMode = document.getElementById('{$modalId}EditMode');
-                
-                if (viewMode) viewMode.style.display = 'block';
-                if (editMode) editMode.style.display = 'none';
-                
-                populateViewData(eventData);
-            }
-            
-            function showEditMode(eventData, isEdit = false) {
-                const viewMode = document.getElementById('{$modalId}ViewMode');
-                const editMode = document.getElementById('{$modalId}EditMode');
-                
-                if (viewMode) viewMode.style.display = 'none';
-                if (editMode) editMode.style.display = 'block';
-                
-                populateFormData(eventData);
-                
-                // Show/hide delete button
-                const deleteBtn = document.getElementById('{$modalId}DeleteBtn');
-                if (deleteBtn) {
-                    deleteBtn.style.display = isEdit ? 'inline-block' : 'none';
-                }
-            }
-            
-            function populateViewData(eventData) {
-                // Populate view fields
-                const fields = ['Title', 'Start', 'End', 'Duration', 'Owner', 'Description'];
-                
-                fields.forEach(field => {
-                    const el = document.getElementById('{$modalId}View' + field);
-                    if (el) {
-                        let value = eventData[field.toLowerCase()] || '-';
-                        
-                        // Special formatting for certain fields
-                        if (field === 'Start' || field === 'End') {
-                            value = formatDateTime(value);
-                        } else if (field === 'Duration') {
-                            value = calculateDuration(eventData.start, eventData.end);
-                        } else if (field === 'Owner') {
-                            value = eventData.owner || eventData.userName || 'Unknown';
-                        }
-                        
-                        el.textContent = value;
-                    }
-                });
-            }
-            
-            function populateFormData(eventData) {
-                // Populate form fields
-                Object.keys(config.fields).forEach(fieldName => {
-                    const fieldEl = document.getElementById('{$modalId}' + capitalizeFirst(fieldName));
-                    if (fieldEl) {
-                        const value = eventData[fieldName] || '';
-                        
-                        if (fieldEl.type === 'checkbox') {
-                            fieldEl.checked = !!value;
-                        } else {
-                            fieldEl.value = value;
-                        }
-                        
-                        // Initialize datetime picker if needed
-                        if (config.fields[fieldName].type === 'datetime' && config.dateTimePicker.enabled) {
-                            initializeDateTimePicker(fieldEl, value);
-                        }
-                    }
-                });
-            }
-            
-            function clearForm() {
-                Object.keys(config.fields).forEach(fieldName => {
-                    const fieldEl = document.getElementById('{$modalId}' + capitalizeFirst(fieldName));
-                    if (fieldEl) {
-                        if (fieldEl.type === 'checkbox') {
-                            fieldEl.checked = false;
-                        } else {
-                            fieldEl.value = '';
-                        }
-                    }
-                });
-            }
-            
-            function initializeDateTimePicker(element, value) {
-                if (typeof jQuery !== 'undefined' && jQuery.fn.datetimepicker) {
-                    const options = {
-                        format: config.dateTimePicker.format,
-                        step: config.dateTimePicker.step,
-                        timepicker: true,
-                        datepicker: true,
-                        closeOnDateSelect: false,
-                        closeOnTimeSelect: true
-                    };
-                    
-                    if (value) {
-                        options.value = new Date(value);
-                    }
-                    
-                    jQuery(element).datetimepicker(options);
-                }
-            }
-            
-            function validateForm() {
-                if (!config.validation.clientSide) return true;
-                
-                let isValid = true;
-                const errors = [];
-                
-                Object.keys(config.fields).forEach(fieldName => {
-                    const fieldConfig = config.fields[fieldName];
-                    const fieldEl = document.getElementById('{$modalId}' + capitalizeFirst(fieldName));
-                    
-                    if (fieldEl && fieldConfig.required) {
-                        const value = fieldEl.value.trim();
-                        if (!value) {
-                            isValid = false;
-                            errors.push(fieldConfig.label + ' is required');
-                            fieldEl.classList.add('error');
-                        } else {
-                            fieldEl.classList.remove('error');
-                        }
-                    }
-                });
-                
-                if (!isValid) {
-                    showMessage('Please fill in all required fields: ' + errors.join(', '), 'error');
-                }
-                
-                return isValid;
-            }
-            
-            function saveEvent() {
-                if (!validateForm()) return;
-                
-                const formData = {};
-                
-                Object.keys(config.fields).forEach(fieldName => {
-                    const fieldEl = document.getElementById('{$modalId}' + capitalizeFirst(fieldName));
-                    if (fieldEl) {
-                        formData[fieldName] = fieldEl.type === 'checkbox' ? fieldEl.checked : fieldEl.value;
-                    }
-                });
-                
-                if (currentEvent && currentEvent.id) {
-                    formData.id = currentEvent.id;
-                }
-                
-                // Emit save event
-                const saveEvent = new CustomEvent('eventModalSave', {
-                    detail: {
-                        data: formData,
-                        isEdit: !!(currentEvent && currentEvent.id),
-                        originalEvent: currentEvent
-                    }
-                });
-                
-                document.dispatchEvent(saveEvent);
-            }
-            
-            function deleteEvent() {
-                if (!currentEvent || !currentEvent.id) return;
-                
-                if (confirm('Are you sure you want to delete this event?')) {
-                    const deleteEvent = new CustomEvent('eventModalDelete', {
-                        detail: {
-                            eventId: currentEvent.id,
-                            originalEvent: currentEvent
-                        }
-                    });
-                    
-                    document.dispatchEvent(deleteEvent);
-                }
-            }
-            
-            // Utility functions
-            function capitalizeFirst(str) {
-                return str.charAt(0).toUpperCase() + str.slice(1);
-            }
-            
-            function formatDateTime(dateStr) {
-                if (!dateStr) return '-';
-                try {
-                    const date = new Date(dateStr);
-                    return date.toLocaleString();
-                } catch (e) {
-                    return dateStr;
-                }
-            }
-            
-            function calculateDuration(start, end) {
-                if (!start || !end) return '-';
-                try {
-                    const startDate = new Date(start);
-                    const endDate = new Date(end);
-                    const diffMs = endDate - startDate;
-                    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-                    const diffMinutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
-                    
-                    if (diffHours === 0) {
-                        return diffMinutes + 'm';
-                    } else if (diffMinutes === 0) {
-                        return diffHours + 'h';
-                    } else {
-                        return diffHours + 'h ' + diffMinutes + 'm';
-                    }
-                } catch (e) {
-                    return '-';
-                }
-            }
-            
-            function showMessage(message, type = 'info') {
-                if (window.showNotification) {
-                    window.showNotification(message, type);
-                } else {
-                    console.log(type.toUpperCase() + ': ' + message);
-                }
-            }
-            
-            // Event listeners
-            if (modalEl) {
-                // Close modal events
-                modalEl.addEventListener('click', function(e) {
-                    if (e.target === modalEl || e.target.classList.contains('modal-close')) {
-                        closeModal();
-                    }
-                });
-                
-                // Form submission
-                const form = document.getElementById('{$modalId}Form');
-                if (form) {
-                    form.addEventListener('submit', function(e) {
-                        e.preventDefault();
-                        saveEvent();
-                    });
-                }
-                
-                // Button events
-                const saveBtn = document.getElementById('{$modalId}SaveBtn');
-                if (saveBtn) {
-                    saveBtn.addEventListener('click', saveEvent);
-                }
-                
-                const deleteBtn = document.getElementById('{$modalId}DeleteBtn');
-                if (deleteBtn) {
-                    deleteBtn.addEventListener('click', deleteEvent);
-                }
-                
-                const deleteFromViewBtn = document.getElementById('{$modalId}DeleteFromViewBtn');
-                if (deleteFromViewBtn) {
-                    deleteFromViewBtn.addEventListener('click', deleteEvent);
-                }
-                
-                const editBtn = document.getElementById('{$modalId}EditBtn');
-                if (editBtn) {
-                    editBtn.addEventListener('click', function() {
-                        showEditMode(currentEvent, true);
-                    });
-                }
-                
-                const cancelBtn = document.getElementById('{$modalId}CancelBtn');
-                if (cancelBtn) {
-                    cancelBtn.addEventListener('click', closeModal);
-                }
-            }
-            
-            // Expose modal API
-            window['{$modalId}'] = {
-                open: openModal,
-                close: closeModal,
-                getCurrentEvent: function() { return currentEvent; },
-                isOpen: function() { return modalEl && modalEl.style.display === 'block'; }
-            };
-            
-        })();
-        ";
+    public function setConfig($config) {
+        $this->config = array_merge_recursive($this->config, $config);
+        return $this;
+    }
+    
+    /**
+     * Set form fields
+     */
+    public function setFields($fields) {
+        $this->formFields = array_merge($this->formFields, $fields);
+        $this->config['fields'] = $this->formFields;
+        return $this;
+    }
+    
+    /**
+     * Add form field
+     */
+    public function addField($name, $config) {
+        $this->formFields[$name] = $config;
+        $this->config['fields'][$name] = $config;
+        return $this;
+    }
+    
+    /**
+     * Set permissions
+     */
+    public function setPermissions($permissions) {
+        $this->config['permissions'] = array_merge($this->config['permissions'], $permissions);
+        return $this;
+    }
+    
+    /**
+     * Set validation rules
+     */
+    public function setValidation($validation) {
+        $this->config['validation'] = array_merge($this->config['validation'], $validation);
+        return $this;
+    }
+    
+    /**
+     * Set button configuration
+     */
+    public function setButtons($buttons) {
+        $this->config['buttons'] = array_merge($this->config['buttons'], $buttons);
+        return $this;
     }
     
     /**
@@ -705,5 +531,36 @@ class EventModal {
     public static function render($config = []) {
         $modal = new self($config);
         $modal->render();
+    }
+    
+    /**
+     * Render minimal modal (just structure, no form)
+     */
+    public static function renderMinimal($modalId, $title = 'Modal', $content = '') {
+        $config = [
+            'modalId' => $modalId,
+            'title' => ['create' => $title],
+            'fields' => []
+        ];
+        
+        ?>
+        <div id="<?php echo htmlspecialchars($modalId); ?>" 
+             class="modal"
+             data-component="modal"
+             data-component-id="<?php echo htmlspecialchars($modalId); ?>"
+             data-auto-init="true">
+            
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2><?php echo htmlspecialchars($title); ?></h2>
+                    <span class="close" data-action="close-modal">&times;</span>
+                </div>
+                
+                <div class="modal-body">
+                    <?php echo $content; ?>
+                </div>
+            </div>
+        </div>
+        <?php
     }
 }
