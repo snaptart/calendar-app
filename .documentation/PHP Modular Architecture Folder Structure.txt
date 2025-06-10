@@ -39,7 +39,9 @@ calendar-app/
 │   │   │   └── table.css
 │   │   └── js/
 │   │       ├── auth.js
+│   │       ├── calendar.js
 │   │       ├── components.js
+│   │       ├── core.js
 │   │       ├── events.js
 │   │       ├── import.js
 │   │       ├── script.js
