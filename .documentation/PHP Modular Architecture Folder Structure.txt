@@ -1,0 +1,86 @@
+Complete folder structure for PHP modular architecture:
+
+calendar-app/
+├── .documentation/
+│   ├── calendar-app.sql
+│   ├── Frontend PHP Modular Architecture Folder Structure.txt
+│   ├── itfmvp.sql
+│   ├── itmdev.data.sql
+│   ├── itmdev.sql
+│   └── role.sql
+├── .gitattributes
+├── .import/
+│   ├── sample_events.csv
+│   ├── sample_events.ics
+│   └── sample_events.json
+├── backend/
+│   ├── api.php
+│   ├── auth/
+│   │   ├── auth.php
+│   │   └── Session.php
+│   ├── database/
+│   │   └── config.php
+│   ├── models/
+│   │   ├── CalendarUpdate.php
+│   │   ├── Event.php
+│   │   ├── EventImport.php
+│   │   └── User.php
+│   └── workers/
+│       ├── import.php
+│       └── sse.php
+├── frontend/
+│   ├── assets/
+│   │   ├── css/
+│   │   │   ├── calendar.css
+│   │   │   ├── events.css
+│   │   │   ├── import.css
+│   │   │   ├── login.css
+│   │   │   ├── style.css
+│   │   │   └── table.css
+│   │   └── js/
+│   │       ├── auth.js
+│   │       ├── events.js
+│   │       ├── import.js
+│   │       ├── script.js
+│   │       └── users.js
+│   ├── components/
+│   │   ├── calendar/
+│   │   │   ├── Calendar.php
+│   │   │   └── EventModal.php
+│   │   ├── forms/
+│   │   │   ├── BaseForm.php
+│   │   │   ├── ImportForm.php
+│   │   │   └── LoginForm.php
+│   │   ├── tables/
+│   │   │   ├── DataTable.php
+│   │   │   └── UserTable.php
+│   │   └── ui/
+│   │       ├── FileUpload.php
+│   │       ├── Modal.php
+│   │       └── StatusIndicator.php
+│   ├── config/
+│   │   └── app.php
+│   ├── examples/
+│   │   ├── layout-examples.php
+│   │   └── ServiceExamples.php
+│   ├── layouts/
+│   │   ├── AppLayout.php
+│   │   ├── AuthLayout.php
+│   │   └── BaseLayout.php
+│   ├── pages/
+│   │   ├── calendar.php
+│   │   ├── events.html
+│   │   ├── events.php
+│   │   ├── import.html
+│   │   ├── import.php
+│   │   ├── index.html
+│   │   ├── login.html
+│   │   ├── login.php
+│   │   ├── logout.php
+│   │   └── users.html
+│   └── services/
+│       ├── ApiClient.php
+│       ├── AuthService.php
+│       └── ConfigService.php
+├── ice time management.clpprj
+└── index.php
