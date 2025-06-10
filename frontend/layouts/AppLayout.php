@@ -415,4 +415,303 @@ class AppLayout extends BaseLayout {
             }
         });
     }
+    
+	<?php
+	/**
+	* ENHANCED AppLayout.php - Component Integration Updates
+	* Location: frontend/layouts/AppLayout.php
+	*
+	* Add these methods to the existing AppLayout class
+	*/
+
+	// =============================================================================
+	// COMPONENT INTEGRATION METHODS (Add to existing AppLayout class)
+	// =============================================================================
+
+	/**
+	* Add component initialization scripts
+	*/
+	public function addComponentScripts()
+	{
+		// Universal component initializer (must be loaded first)
+		$this->addJS('../assets/js/components.js');
+
+		// Individual component scripts
+		$this->addJS('../assets/js/script.js');        // Calendar components
+		$this->addJS('../assets/js/events.js');        // DataTable components
+		$this->addJS('../assets/js/users.js');         // User management components
+		$this->addJS('../assets/js/import.js');        // Import components
+		$this->addJS('../assets/js/auth.js');          // Authentication/form components
+
+		return $this;
+	}
+
+	/**
+	* Enhanced method to add authentication scripts with component support
+	*/
+	public function addAuthenticationScripts()
+	{
+		$this->addInlineJS('
+        // Enhanced authentication event handlers with component integration
+        document.addEventListener("DOMContentLoaded", function() {
+            // Initialize components first
+            if (typeof ComponentInitializer !== "undefined") {
+                ComponentInitializer.initializeAll();
+            }
+
+            // Add logout functionality if button exists
+            const logoutBtn = document.getElementById("logoutBtn");
+            if (logoutBtn) {
+                logoutBtn.addEventListener("click", function() {
+                    if (confirm("Are you sure you want to logout?")) {
+                        window.location.href = "./login.html";
+                    }
+                });
+            }
+
+            // Handle authentication status updates
+            if (typeof EventBus !== "undefined") {
+                EventBus.on("auth:unauthorized", function() {
+                    window.location.href = "./login.html";
+                });
+
+                EventBus.on("auth:authenticated", function(data) {
+                    console.log("User authenticated:", data.user);
+                });
+            }
+        });
+    ');
+
+		return $this;
+	}
+
+	/**
+	* Enhanced navigation script with component support
+	*/
+	public function addNavigationScript()
+	{
+		$this->addInlineJS('
+        document.addEventListener("DOMContentLoaded", function() {
+            // Wait for components to initialize
+            setTimeout(function() {
+                // Update active navigation based on current page
+                const currentPage = window.location.pathname.split("/").pop() || "calendar.php";
+                const navLinks = document.querySelectorAll(".nav-link");
+
+                navLinks.forEach(function(link) {
+                    link.classList.remove("active");
+                    const linkPage = link.getAttribute("href").replace("./", "");
+
+                    if (currentPage === linkPage ||
+                        (currentPage === "" && linkPage === "calendar.php") ||
+                        (currentPage === "index.php" && linkPage === "calendar.php")) {
+                        link.classList.add("active");
+                    }
+                });
+            }, 100);
+        });
+    ');
+
+		return $this;
+	}
+
+	/**
+	* Enhanced method to create a complete authenticated page with component support
+	*/
+	public static function createComponentPage($config, $contentCallback)
+	{
+		$layout = new self($config);
+
+		// Add component scripts and authentication
+		$layout->addComponentScripts()
+		->addAuthenticationScripts()
+		->addNavigationScript();
+
+		// Render the complete page
+		$layout->renderContent($contentCallback);
+	}
+
+	/**
+	* Enhanced method to create a table page with component support
+	*/
+	public static function createTablePage($config, $tableContent)
+	{
+		$config['containerClass'] = 'container';
+
+		self::createComponentPage($config, function() use ($config, $tableContent) {
+			$layout = new self($config);
+
+			// Render table controls if provided
+			if (isset($config['tableTitle'])) {
+				$layout->renderTableControls(
+				$config['tableTitle'],
+				$config['tableDescription'] ?? '',
+				$config['tableActions'] ?? null
+				);
+			}
+
+			// Render main table content with component attributes
+			echo '<div data-component-container="table">';
+			if (is_callable($tableContent)) {
+				call_user_func($tableContent);
+			} else {
+				echo $tableContent;
+			}
+			echo '</div>';
+		});
+	}
+
+	/**
+	* Enhanced method to create a calendar page with component support
+	*/
+	public static function createCalendarPage($config, $calendarContent, $controlsContent = null)
+	{
+		self::createComponentPage($config, function() use ($config, $calendarContent, $controlsContent) {
+			$layout = new self($config);
+
+			// Render calendar controls with component support
+			$layout->renderCalendarControls(function() use ($controlsContent) {
+				echo '<div data-component-container="calendar-controls">';
+				if (is_callable($controlsContent)) {
+					call_user_func($controlsContent);
+				} elseif ($controlsContent) {
+					echo $controlsContent;
+				}
+				echo '</div>';
+			});
+
+			// Render calendar content with component attributes
+			echo '<div data-component-container="calendar">';
+			if (is_callable($calendarContent)) {
+				call_user_func($calendarContent);
+			} else {
+				echo $calendarContent;
+			}
+			echo '</div>';
+		});
+	}
+
+	/**
+	* Enhanced render method with component debugging support
+	*/
+	public function renderContentWithComponents($contentCallback, $debugMode = false)
+	{
+		$this->start();
+
+		echo '<div class="' . $this->e($this->containerClass) . '"';
+		if ($debugMode) {
+			echo ' data-debug="true"';
+		}
+		echo ' data-app="collaborative-calendar">' . "\n";
+
+		// Render header
+		$this->renderHeader();
+
+		// Render main content with component wrapper
+		echo '<main data-component-container="main">' . "\n";
+		if (is_callable($contentCallback)) {
+			call_user_func($contentCallback);
+		} else {
+			echo $contentCallback;
+		}
+		echo '</main>' . "\n";
+
+		echo '</div>' . "\n";
+
+		// Render loading overlay and message containers
+		$this->renderLoadingOverlay();
+		$this->renderMessageContainers();
+
+		$this->end();
+	}
+
+	/**
+	* Render enhanced user section with component attributes
+	*/
+	protected function renderUserSection()
+	{
+	?>
+	<div class="user-section" data-component-container="user-section">
+		<label for="userName">
+			Logged in as
+		</label>
+		<input type="text"
+		id="userName"
+		placeholder="Authenticating..."
+		disabled
+		data-component="user-display"
+		data-component-id="user-display"
+		data-auto-init="false" />
+		<span id="userStatus"
+		class="status"
+		data-component="status"
+		data-component-id="user-status"
+		data-initial-state="checking">
+		Checking authentication...
+		</span>
+		<!-- Logout button will be added dynamically by JavaScript -->
+	</div>
+	<?php
+}
+
+	/**
+	* Enhanced table controls with component attributes
+	*/
+	public function renderTableControls($title, $description, $actions = null)
+	{
+		?>
+		<div class="table-controls" data-component-container="table-controls">
+			<div class="table-info">
+				<h3>
+					<?php echo $this->e($title); ?>
+				</h3>
+				<?php
+		if ($description) : ?>
+				<p class="table-description">
+					<?php echo $this->e($description); ?>
+				</p>
+				<?php
+		endif; ?>
+			</div>
+
+			<div class="table-actions" data-component-container="table-actions">
+				<?php
+		if (is_callable($actions)) {
+			call_user_func($actions);
+		} elseif ($actions) {
+			echo $actions;
+		}
+		?>
+
+				<div class="connection-status">
+					<span id="connectionStatus"
+					class="status"
+					data-component="status"
+					data-component-id="connection-status"
+					data-initial-state="ready">
+					Ready
+					</span>
+				</div>
+			</div>
+		</div>
+		<?php
+	}
+
+		/**
+		* Enhanced calendar controls with component attributes
+		*/
+	public function renderCalendarControls($content = null)
+	{
+		?>
+		<div class="calendar-controls" data-component-container="calendar-controls">
+			<?php
+		if (is_callable($content)) {
+			call_user_func($content);
+		} elseif ($content) {
+			echo $content;
+		}
+		?>
+		</div>
+		<?php
+	}
 }

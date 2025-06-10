@@ -370,3 +370,292 @@ window.addEventListener('pageshow', (event) => {
         AuthGuard.init();
     }
 });
+
+// ENHANCED: auth.js - Form Component Registration
+// Add this to the END of the existing auth.js file
+
+// =============================================================================
+// COMPONENT REGISTRATION
+// =============================================================================
+
+/**
+* Register Form Component with the Universal Component Registry
+*/
+if (typeof ComponentRegistry !== 'undefined') {
+	ComponentRegistry.register('form', {
+/**
+* Initialize form component from data attributes
+*/
+		init: function(element, data) {
+			console.log('Initializing form component:', data.componentId);
+
+			// Parse configuration from data attributes
+			const validation = DataAttributeUtils.parseBoolean(element.dataset.validation, true);
+			const submitUrl = element.dataset.submitUrl;
+			const submitMethod = element.dataset.submitMethod || 'POST';
+			const permissions = DataAttributeUtils.parseJSON(element.dataset.permissions, {});
+
+			// Set up form submission
+			element.addEventListener('submit', (e) => {
+				e.preventDefault();
+				this.handleFormSubmit(element, {
+					url: submitUrl,
+					method: submitMethod,
+					validation: validation
+				});
+			});
+
+			// Set up field validation if enabled
+			if (validation) {
+				this.setupFieldValidation(element);
+			}
+
+			const instance = {
+				element: element,
+				validation: validation,
+				permissions: permissions,
+
+				// Public methods
+				validate: function() {
+					return validation ? this.validateAllFields() : true;
+				},
+
+				validateAllFields: function() {
+					const fields = element.querySelectorAll('[data-validate]');
+					let isValid = true;
+
+					fields.forEach(field => {
+						if (!this.validateField(field)) {
+							isValid = false;
+						}
+					});
+
+					return isValid;
+				},
+
+				validateField: function(field) {
+					const rules = field.dataset.validate.split('|');
+					const value = field.value.trim();
+					const errorElement = document.getElementById(field.id + 'Error') ||
+					field.parentNode.querySelector('.form-error');
+
+					// Clear previous errors
+					this.clearFieldError(field, errorElement);
+
+					for (let rule of rules) {
+						const [ruleName, ruleValue] = rule.split(':');
+
+						if (!this.validateRule(value, ruleName, ruleValue)) {
+							this.showFieldError(field, errorElement, this.getErrorMessage(ruleName, ruleValue));
+							return false;
+						}
+					}
+
+					return true;
+				},
+
+				showFieldError: function(field, errorElement, message) {
+					field.classList.add('error');
+					if (errorElement) {
+						errorElement.textContent = message;
+						errorElement.style.display = 'block';
+					}
+				},
+
+				clearFieldError: function(field, errorElement) {
+					field.classList.remove('error');
+					if (errorElement) {
+						errorElement.style.display = 'none';
+					}
+				},
+
+				reset: function() {
+					element.reset();
+					this.clearAllErrors();
+				},
+
+				clearAllErrors: function() {
+					const errorFields = element.querySelectorAll('.error');
+					const errorElements = element.querySelectorAll('.form-error');
+
+					errorFields.forEach(field => field.classList.remove('error'));
+					errorElements.forEach(el => el.style.display = 'none');
+				},
+
+				submit: function() {
+					if (this.validate()) {
+						element.dispatchEvent(new Event('submit'));
+					}
+				}
+			};
+
+			return instance;
+		},
+
+/**
+* Setup field validation
+*/
+		setupFieldValidation: function(form) {
+			const fields = form.querySelectorAll('[data-validate]');
+
+			fields.forEach(field => {
+				// Real-time validation on blur
+				field.addEventListener('blur', (e) => {
+					const instance = ComponentRegistry.getInstance(form.id);
+					if (instance && instance.instance.validateField) {
+						instance.instance.validateField(e.target);
+					}
+				});
+
+				// Clear error on input
+				field.addEventListener('input', (e) => {
+					if (e.target.classList.contains('error')) {
+						const errorElement = document.getElementById(e.target.id + 'Error') ||
+						e.target.parentNode.querySelector('.form-error');
+						const instance = ComponentRegistry.getInstance(form.id);
+						if (instance && instance.instance.clearFieldError) {
+							instance.instance.clearFieldError(e.target, errorElement);
+						}
+					}
+				});
+			});
+		},
+
+/**
+* Handle form submission
+*/
+		handleFormSubmit: function(form, config) {
+			const instance = ComponentRegistry.getInstance(form.id);
+
+			if (!instance || !instance.instance.validate()) {
+				return;
+			}
+
+			const submitButton = form.querySelector('[type="submit"]');
+			const formData = new FormData(form);
+
+			// Show loading state
+			if (submitButton) {
+				submitButton.disabled = true;
+				submitButton.textContent = 'Processing...';
+			}
+
+			// Prepare request options
+			const requestOptions = {
+				method: config.method,
+				credentials: 'include'
+			};
+
+			if (config.method === 'POST') {
+				requestOptions.body = formData;
+			}
+
+			// Make request
+			fetch(config.url, requestOptions)
+			.then(response => {
+				if (!response.ok) {
+					throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+				}
+				return response.json();
+			})
+			.then(data => {
+				if (data.success) {
+					this.handleFormSuccess(form, data);
+				} else {
+					this.handleFormError(form, data.error || 'Form submission failed');
+				}
+			})
+			.catch(error => {
+				console.error('Form submission error:', error);
+				this.handleFormError(form, error.message);
+			})
+			.finally(() => {
+				// Reset loading state
+				if (submitButton) {
+					submitButton.disabled = false;
+					submitButton.textContent = submitButton.dataset.originalText || 'Submit';
+				}
+			});
+		},
+
+/**
+* Handle successful form submission
+*/
+		handleFormSuccess: function(form, data) {
+			// Show success message
+			AuthUtils.showMessage(data.message || 'Form submitted successfully', 'success');
+
+			// Emit success event
+			form.dispatchEvent(new CustomEvent('form:success', {
+				detail: data
+			}));
+
+			// Handle redirects for auth forms
+			if (form.id === 'loginForm' && data.redirect) {
+				setTimeout(() => {
+					window.location.href = data.redirect;
+				}, 1000);
+			}
+		},
+
+/**
+* Handle form submission error
+*/
+		handleFormError: function(form, error) {
+			AuthUtils.showMessage(error, 'error');
+
+			// Emit error event
+			form.dispatchEvent(new CustomEvent('form:error', {
+				detail: { error: error }
+			}));
+		},
+
+/**
+* Validate individual rule
+*/
+		validateRule: function(value, ruleName, ruleValue) {
+			switch (ruleName) {
+				case 'required':
+					return value.length > 0;
+				case 'email':
+					return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+				case 'minlength':
+					return value.length >= parseInt(ruleValue);
+				case 'maxlength':
+					return value.length <= parseInt(ruleValue);
+				case 'min':
+					return parseFloat(value) >= parseFloat(ruleValue);
+				case 'max':
+					return parseFloat(value) <= parseFloat(ruleValue);
+				case 'pattern':
+					return new RegExp(ruleValue).test(value);
+				default:
+					return true;
+			}
+		},
+
+/**
+* Get error message for validation rule
+*/
+		getErrorMessage: function(ruleName, ruleValue) {
+			const messages = {
+				required: 'This field is required',
+				email: 'Please enter a valid email address',
+				minlength: `Must be at least ${ruleValue} characters`,
+				maxlength: `Must be no more than ${ruleValue} characters`,
+				min: `Value must be at least ${ruleValue}`,
+				max: `Value must be no more than ${ruleValue}`,
+				pattern: 'Please match the required format'
+			};
+
+			return messages[ruleName] || 'Invalid value';
+		},
+
+/**
+* Destroy form component
+*/
+		destroy: function(instance) {
+			// Cleanup event listeners if needed
+		}
+	});
+}

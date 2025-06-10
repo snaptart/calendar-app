@@ -1540,3 +1540,271 @@ window.addEventListener('pageshow', (event) => {
         AuthGuard.checkAuthentication();
     }
 });
+
+// ENHANCED: events.js - DataTable Component Registration
+// Add this to the END of the existing events.js file
+
+// =============================================================================
+// COMPONENT REGISTRATION
+// =============================================================================
+
+/**
+* Register DataTable Component with the Universal Component Registry
+*/
+if (typeof ComponentRegistry !== 'undefined') {
+	ComponentRegistry.register('datatable', {
+/**
+* Initialize DataTable component from data attributes
+*/
+		init: function(element, data) {
+			console.log('Initializing datatable component:', data.componentId);
+
+			// Parse configuration from data attributes
+			const tableConfig = DataAttributeUtils.parseJSON(element.dataset.config, {});
+			const columns = DataAttributeUtils.parseJSON(element.dataset.columns, []);
+			const columnDefs = DataAttributeUtils.parseJSON(element.dataset.columnDefs, []);
+			const buttons = DataAttributeUtils.parseJSON(element.dataset.buttons, []);
+			const permissions = DataAttributeUtils.parseJSON(element.dataset.permissions, {});
+			const serverSide = DataAttributeUtils.parseBoolean(element.dataset.serverSide, false);
+			const apiUrl = element.dataset.apiUrl;
+
+			// Build DataTable configuration
+			const config = {
+				responsive: tableConfig.responsive !== false,
+				pageLength: tableConfig.pageLength || 25,
+				lengthMenu: tableConfig.lengthMenu || [[10, 25, 50, 100, -1], [10, 25, 50, 100, "All"]],
+				order: tableConfig.order || [[0, 'asc']],
+				searching: permissions.canFilter !== false,
+				paging: tableConfig.paging !== false,
+				info: tableConfig.info !== false,
+				autoWidth: tableConfig.autoWidth !== true,
+				processing: true,
+				serverSide: serverSide,
+				stateSave: tableConfig.stateSave || false,
+				dom: tableConfig.dom || 'Bfrtip',
+				language: tableConfig.language || {
+					search: "Search:",
+					lengthMenu: "Show _MENU_ entries per page",
+					info: "Showing _START_ to _END_ of _TOTAL_ entries",
+					infoEmpty: "No entries found",
+					infoFiltered: "(filtered from _MAX_ total entries)",
+					paginate: {
+						first: "First",
+						last: "Last",
+						next: "Next",
+						previous: "Previous"
+					},
+					emptyTable: "No data available in table"
+				},
+				columns: columns,
+				columnDefs: columnDefs,
+				buttons: []
+			};
+
+			// Add buttons if permissions allow
+			if (permissions.canExport !== false && buttons.length > 0) {
+				config.buttons = buttons.map(button => ({
+					extend: button.extend,
+					text: button.text,
+					filename: button.filename + '_' + new Date().toISOString().split('T')[0]
+				}));
+			}
+
+			// Initialize DataTable
+			const dataTable = $(element).DataTable(config);
+
+			// Load initial data if provided and not server-side
+			if (!serverSide && element.dataset.data) {
+				const initialData = DataAttributeUtils.parseJSON(element.dataset.data, []);
+				dataTable.clear();
+				dataTable.rows.add(initialData);
+				dataTable.draw();
+			}
+
+			// Set up API integration if server-side
+			if (serverSide && apiUrl) {
+				this.setupServerSideProcessing(dataTable, apiUrl);
+			}
+
+			const instance = {
+				dataTable: dataTable,
+				element: element,
+				config: config,
+				permissions: permissions,
+
+				// Public methods
+				loadData: function(data) {
+					dataTable.clear();
+					if (Array.isArray(data)) {
+						dataTable.rows.add(data);
+					}
+					dataTable.draw();
+				},
+
+				addRow: function(rowData) {
+					dataTable.row.add(rowData);
+					dataTable.draw();
+				},
+
+				updateRow: function(rowIndex, rowData) {
+					dataTable.row(rowIndex).data(rowData);
+					dataTable.draw();
+				},
+
+				removeRow: function(rowIndex) {
+					dataTable.row(rowIndex).remove();
+					dataTable.draw();
+				},
+
+				refresh: function() {
+					if (serverSide) {
+						dataTable.ajax.reload();
+					} else {
+						// Emit refresh event for client-side processing
+						EventBus.emit('datatable:refresh', {
+							componentId: data.componentId
+						});
+					}
+				},
+
+				search: function(query) {
+					dataTable.search(query).draw();
+				},
+
+				getSelectedRows: function() {
+					return dataTable.rows('.selected').data().toArray();
+				}
+			};
+
+			// Set up real-time updates if enabled
+			if (data.realTime) {
+				this.setupRealTimeUpdates(instance, data.componentId);
+			}
+
+			return instance;
+		},
+
+/**
+* Setup server-side processing
+*/
+		setupServerSideProcessing: function(dataTable, apiUrl) {
+			// Configure server-side processing
+			dataTable.settings()[0].ajax = {
+				url: apiUrl,
+				type: 'POST',
+				data: function(d) {
+					// Add any additional parameters
+					d.action = 'datatable_data';
+					return d;
+				}
+			};
+		},
+
+/**
+* Setup real-time updates
+*/
+		setupRealTimeUpdates: function(instance, componentId) {
+			// Listen for data refresh events
+			EventBus.on('datatable:refresh', (data) => {
+				if (data.componentId === componentId || data.componentId === 'all') {
+					instance.refresh();
+				}
+			});
+
+			// Listen for SSE updates
+			EventBus.on('sse:dataUpdate', (data) => {
+				if (data.table === componentId || data.table === 'all') {
+					instance.refresh();
+				}
+			});
+		},
+
+/**
+* Destroy DataTable component
+*/
+		destroy: function(instance) {
+			if (instance && instance.dataTable) {
+				instance.dataTable.destroy();
+			}
+		},
+
+/**
+* Get DataTable instance
+*/
+		getInstance: function(componentId) {
+			const instanceData = ComponentRegistry.getInstance(componentId);
+			return instanceData ? instanceData.instance : null;
+		}
+	});
+}
+
+// =============================================================================
+// TABLE CONTROLS COMPONENT REGISTRATION
+// =============================================================================
+
+if (typeof ComponentRegistry !== 'undefined') {
+	ComponentRegistry.register('table-controls', {
+		init: function(element, data) {
+			console.log('Initializing table-controls component:', data.componentId);
+
+			const targetTable = document.querySelector(data.target);
+			if (!targetTable) {
+				console.warn('Target table not found for controls:', data.target);
+				return null;
+			}
+
+			// Set up search functionality
+			const searchInput = element.querySelector('.table-search');
+			if (searchInput) {
+				searchInput.addEventListener('input', ComponentUtils.debounce((e) => {
+					const tableInstance = ComponentRegistry.getInstance(targetTable.id);
+					if (tableInstance && tableInstance.instance.search) {
+						tableInstance.instance.search(e.target.value);
+					}
+				}, 300));
+			}
+
+			// Set up length change functionality
+			const lengthSelect = element.querySelector('.table-length');
+			if (lengthSelect) {
+				lengthSelect.addEventListener('change', (e) => {
+					const tableInstance = ComponentRegistry.getInstance(targetTable.id);
+					if (tableInstance && tableInstance.instance.dataTable) {
+						tableInstance.instance.dataTable.page.len(parseInt(e.target.value)).draw();
+					}
+				});
+			}
+
+			// Set up export buttons
+			const exportButtons = element.querySelectorAll('[data-action="export"]');
+			exportButtons.forEach(button => {
+				button.addEventListener('click', (e) => {
+					const exportType = e.target.dataset.exportType;
+					const filename = e.target.dataset.filename;
+					const tableInstance = ComponentRegistry.getInstance(targetTable.id);
+
+					if (tableInstance && tableInstance.instance.dataTable) {
+						// Trigger DataTable export
+						const buttons = tableInstance.instance.dataTable.buttons();
+						buttons.forEach((btn, index) => {
+							if (btn.conf.extend === exportType) {
+								tableInstance.instance.dataTable.button(index).trigger();
+							}
+						});
+					}
+				});
+			});
+
+			return {
+				element: element,
+				targetTable: targetTable,
+				searchInput: searchInput,
+				lengthSelect: lengthSelect
+			};
+		},
+
+		destroy: function(instance) {
+			// Cleanup event listeners if needed
+		}
+	});
+}
