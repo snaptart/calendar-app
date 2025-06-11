@@ -47,7 +47,7 @@ sendSSE(0, 'heartbeat', ['timestamp' => time(), 'message' => 'SSE connection est
 logSSEEvent("Client connected with lastEventId: $lastId");
 
 // Main event loop configuration
-$maxExecutionTime = 30; // 30 seconds maximum execution time
+$maxExecutionTime = 300; // 5 minutes maximum execution time
 $startTime = time();
 $checkInterval = 1; // Check every 1 second
 $heartbeatInterval = 10; // Send heartbeat every 10 seconds
@@ -57,7 +57,7 @@ $lastHeartbeat = time();
 while (time() - $startTime < $maxExecutionTime) {
     try {
         // Check for new updates in the database
-        $stmt = $pdo->prepare("SELECT * FROM calendar_updates WHERE id > ? ORDER BY id ASC LIMIT 10");
+        $stmt = $pdo->prepare("SELECT * FROM event_updates WHERE id > ? ORDER BY id ASC LIMIT 10");
         $stmt->execute([$lastId]);
         $updates = $stmt->fetchAll();
         
@@ -76,7 +76,7 @@ while (time() - $startTime < $maxExecutionTime) {
         // Clean up old updates periodically to prevent table bloat
         if (rand(1, 100) === 1) { // 1% chance to clean up on each iteration
             try {
-                $deleteStmt = $pdo->prepare("DELETE FROM calendar_updates WHERE id < (SELECT * FROM (SELECT id FROM calendar_updates ORDER BY id DESC LIMIT 1 OFFSET 100) AS temp)");
+                $deleteStmt = $pdo->prepare("DELETE FROM event_updates WHERE id < (SELECT * FROM (SELECT id FROM event_updates ORDER BY id DESC LIMIT 1 OFFSET 100) AS temp)");
                 $deleteStmt->execute();
                 $deletedCount = $deleteStmt->rowCount();
                 if ($deletedCount > 0) {

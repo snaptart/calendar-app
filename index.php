@@ -127,7 +127,7 @@ $externalDeps = [
 
         <main id="main-content">
             <?php
-            $pageFile = "pages/{$page}.php";
+            $pageFile = "frontend/pages/{$page}.php";
             if (file_exists($pageFile)) {
                 include $pageFile;
             } else {

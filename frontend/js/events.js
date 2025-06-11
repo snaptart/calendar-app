@@ -377,7 +377,7 @@ const AuthGuard = (() => {
     };
     
     const redirectToLogin = () => {
-        window.location.href = './login.php';
+        window.location.href = '../login.php';
     };
     
     const getCurrentUser = () => currentUser;
@@ -1473,7 +1473,7 @@ const EventsApp = (() => {
         // Add event button
         const addEventBtn = document.getElementById('addEventBtn');
         addEventBtn?.addEventListener('click', () => {
-            window.location.href = './index.html'; // Redirect to calendar for event creation
+            window.location.href = '../index.php'; // Redirect to calendar for event creation
         });
         
         // Table row action handlers

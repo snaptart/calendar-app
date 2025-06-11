@@ -233,7 +233,7 @@ const AuthGuard = (() => {
     };
     
     const redirectToLogin = () => {
-        window.location.href = 'login.php';
+        window.location.href = '../login.php';
     };
     
     const getCurrentUser = () => currentUser;
@@ -339,6 +339,13 @@ const UserManager = (() => {
             renderUserCheckboxes();
             
             EventBus.emit('users:loaded', { users });
+            
+            // Load events after users are loaded and current user is selected
+            if (currentUser) {
+                EventBus.emit('users:selectionChanged', {
+                    selectedUserIds: Array.from(selectedUserIds)
+                });
+            }
         } catch (error) {
             console.error('Error loading users:', error);
             EventBus.emit('users:error', { error });
@@ -889,8 +896,8 @@ const EventManager = (() => {
         
         processedEventIds.add(key);
         
-        // Clean up after 5 minutes
-        setTimeout(() => processedEventIds.delete(key), 300000);
+        // Clean up after 30 seconds (much shorter to allow legitimate updates)
+        setTimeout(() => processedEventIds.delete(key), 30000);
         
         return false; // Not duplicate
     };
@@ -1074,6 +1081,27 @@ const CalendarManager = (() => {
             event.setProp('title', eventData.title);
             event.setStart(eventData.start);
             event.setEnd(eventData.end);
+            
+            // Update extended properties if they exist
+            if (eventData.extendedProps) {
+                Object.keys(eventData.extendedProps).forEach(key => {
+                    event.setExtendedProp(key, eventData.extendedProps[key]);
+                });
+            }
+            
+            // Update colors if they exist
+            if (eventData.backgroundColor) {
+                event.setProp('backgroundColor', eventData.backgroundColor);
+            }
+            if (eventData.borderColor) {
+                event.setProp('borderColor', eventData.borderColor);
+            }
+        } else {
+            // Event doesn't exist in calendar, check if we should add it
+            const selectedUserIds = UserManager.getSelectedUserIds();
+            if (selectedUserIds.includes(eventData.extendedProps.userId.toString())) {
+                calendar?.addEvent(eventData);
+            }
         }
     };
     
@@ -1192,11 +1220,17 @@ const SSEManager = (() => {
             eventSource.addEventListener(eventType, (e) => {
                 try {
                     const eventData = JSON.parse(e.data);
-                    const eventId = `${eventType}-${eventData.id || Date.now()}`;
+                    lastEventId = parseInt(e.lastEventId) || lastEventId;
                     
-                    if (!EventManager.preventDuplicateProcessing(eventId, eventType)) {
+                    // Use the SSE event ID to prevent true duplicates (same SSE message)
+                    // but allow legitimate moves that may return to previous positions
+                    const sseEventId = `sse-${lastEventId}`;
+                    
+                    if (!EventManager.preventDuplicateProcessing(sseEventId, 'sse')) {
+                        console.log(`Processing SSE ${eventType} event:`, eventData);
                         handler(eventData);
-                        lastEventId = parseInt(e.lastEventId) || lastEventId;
+                    } else {
+                        console.log(`Skipping duplicate SSE message ID ${lastEventId} for event:`, eventData.id);
                     }
                 } catch (error) {
                     console.error(`Error handling SSE ${eventType} event:`, error);
