@@ -42,10 +42,10 @@
                     </nav>
                 </div>
                 <div class="user-section">
-                    <label for="userName">Logged in as</label>
-                    <input type="text" id="userName" placeholder="Authenticating..." disabled />
-                    <span id="userStatus" class="status">Checking authentication...</span>
-                    <!-- Logout button will be added dynamically -->
+                    <span class="user-label">Logged in as</span>
+                    <span id="userName" class="user-name">Michael Schroeder</span>
+                    <span id="userStatus" class="user-status-btn">Logged in as: Michael Schroeder</span>
+                    <button id="logoutBtn" class="logout-btn">Logout</button>
                 </div>
             </div>
         </header>
@@ -59,7 +59,7 @@
             <div class="table-actions">
                 <div class="filter-controls">
                     <div class="filter-group">
-                        <label for="eventViewFilter">View:</label>
+                        <label for="eventViewFilter">VIEW:</label>
                         <select id="eventViewFilter" class="form-control form-control-sm">
                             <option value="all">All Events</option>
                             <option value="my">My Events Only</option>
@@ -68,7 +68,7 @@
                     </div>
                     
                     <div class="filter-group">
-                        <label for="eventStatusFilter">Status:</label>
+                        <label for="eventStatusFilter">STATUS:</label>
                         <select id="eventStatusFilter" class="form-control form-control-sm">
                             <option value="">All Status</option>
                             <option value="upcoming">Upcoming</option>
@@ -78,7 +78,7 @@
                     </div>
                     
                     <div class="filter-group">
-                        <label for="eventUserFilter">User:</label>
+                        <label for="eventUserFilter">USER:</label>
                         <select id="eventUserFilter" class="form-control form-control-sm">
                             <option value="">All Users</option>
                             <!-- Users will be populated dynamically -->
@@ -98,8 +98,26 @@
                 </div>
                 
                 <div class="connection-status">
-                    <span id="connectionStatus" class="status">Initializing...</span>
+                    <span id="connectionStatus" class="status">Connected</span>
                 </div>
+            </div>
+        </div>
+
+        <div class="export-controls">
+            <button class="export-btn export-csv">
+                📄 Export CSV
+            </button>
+            <button class="export-btn export-excel">
+                📊 Export Excel
+            </button>
+            <button class="export-btn export-pdf">
+                📄 Export PDF
+            </button>
+            <button class="export-btn export-print">
+                🖨️ Print
+            </button>
+            <div class="search-box">
+                <input type="text" id="searchEvents" placeholder="Search events..." />
             </div>
         </div>
 
@@ -108,13 +126,13 @@
                 <table id="eventsTable" class="table table-striped table-hover" style="width:100%">
                     <thead>
                         <tr>
-                            <th>Title</th>
-                            <th>Start Date/Time</th>
-                            <th>End Date/Time</th>
-                            <th>Duration</th>
-                            <th>Owner</th>
-                            <th>Status</th>
-                            <th>Actions</th>
+                            <th>TITLE</th>
+                            <th>START DATE/TIME</th>
+                            <th>END DATE/TIME</th>
+                            <th>DURATION</th>
+                            <th>OWNER</th>
+                            <th>STATUS</th>
+                            <th>ACTIONS</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -212,5 +230,6 @@
     
     <!-- Application JavaScript -->
     <script src="../js/events.js"></script>
+    <script src="../js/events-export.js"></script>
 </body>
 </html>

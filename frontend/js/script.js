@@ -42,8 +42,8 @@ const EventBus = (() => {
  */
 const Config = {
     apiEndpoints: {
-        api: '../../backend/api.php',
-        sse: '../../backend/workers/sse.php'
+        api: 'backend/api.php',
+        sse: 'backend/workers/sse.php'
     },
     calendar: {
         defaultView: 'dayGridMonth',
@@ -206,6 +206,14 @@ const AuthGuard = (() => {
     let currentUser = null;
     
     const checkAuthentication = async () => {
+        // Check if currentUser is already set by PHP
+        if (window.currentUser) {
+            currentUser = window.currentUser;
+            EventBus.emit('auth:authenticated', { user: currentUser });
+            return true;
+        }
+        
+        // Fallback to API check
         try {
             const response = await APIClient.checkAuth();
             
@@ -225,7 +233,7 @@ const AuthGuard = (() => {
     };
     
     const redirectToLogin = () => {
-        window.location.href = './login.html';
+        window.location.href = 'login.php';
     };
     
     const getCurrentUser = () => currentUser;
@@ -355,6 +363,15 @@ const UserManager = (() => {
             userNameInput.value = user.name;
             userNameInput.disabled = true; // User is now authenticated
         }
+        
+        // Update the header h1 title to show user's name
+        const titleElement = document.querySelector('header h1');
+        if (titleElement) {
+            titleElement.innerHTML = `📅 ${user.name}'s Calendar`;
+        }
+        
+        // Also update the page title
+        document.title = `${user.name}'s Calendar`;
         
         EventBus.emit('user:set', { user });
     });

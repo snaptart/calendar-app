@@ -1,0 +1,9 @@
+RewriteEngine On
+
+# Redirect requests to index.php with page parameter
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^(events|users|import)/?$ index.php?page=$1 [L,QSA]
+
+# Optional: Redirect calendar to index.php (for consistency)
+RewriteRule ^calendar/?$ index.php [L,QSA]

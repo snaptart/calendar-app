@@ -42,8 +42,8 @@ const EventBus = (() => {
  */
 const Config = {
     apiEndpoints: {
-        api: '../../backend/api.php',
-        sse: '../../backend/workers/sse.php'
+        api: 'backend/api.php',
+        sse: 'backend/workers/sse.php'
     },
     sse: {
         maxReconnectAttempts: 10,

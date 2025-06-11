@@ -1,0 +1,63 @@
+<?php
+// Ensure we have current user and page variables
+$currentUser = $currentUser ?? null;
+$page = $page ?? 'calendar';
+
+// Navigation menu configuration
+$navItems = [
+    'calendar' => ['icon' => '📅', 'label' => 'Calendar'],
+    'events' => ['icon' => '📋', 'label' => 'Events'],
+    'users' => ['icon' => '👥', 'label' => 'Users'],
+    'import' => ['icon' => '📥', 'label' => 'Import']
+];
+?>
+
+<header>
+    <div class="header-content">
+        <div class="header-left">
+            <h1>
+                📅 <?php echo htmlspecialchars($currentUser['name'] ?? 'User'); ?>'s Calendar
+            </h1>
+            <nav class="main-navigation">
+                <?php foreach ($navItems as $navPage => $navConfig): ?>
+                    <a href="<?php echo $navPage === 'calendar' ? 'index.php' : 'index.php?page=' . $navPage; ?>" 
+                       class="nav-link <?php echo $page === $navPage ? 'active' : ''; ?>">
+                        <?php echo $navConfig['icon']; ?> <?php echo $navConfig['label']; ?>
+                    </a>
+                <?php endforeach; ?>
+            </nav>
+        </div>
+        <div class="user-section">
+            <label for="userName">
+                Logged in as
+            </label>
+            <input type="text" 
+                   id="userName" 
+                   value="<?php echo htmlspecialchars($currentUser['name'] ?? 'Loading...'); ?>" 
+                   disabled />
+            <button id="logoutBtn" class="btn btn-small btn-outline" onclick="handleLogout()">
+                Logout
+            </button>
+        </div>
+    </div>
+</header>
+
+<script>
+function handleLogout() {
+    if (confirm('Are you sure you want to logout?')) {
+        fetch('backend/api.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ action: 'logout' })
+        })
+        .then(() => {
+            window.location.href = 'login.php';
+        })
+        .catch(error => {
+            console.error('Logout error:', error);
+            window.location.href = 'login.php';
+        });
+    }
+}
+</script>

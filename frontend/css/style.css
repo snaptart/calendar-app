@@ -569,3 +569,83 @@ header h1 {
         font-size: 0.75rem !important;
     }
 }
+
+/* Footer Styles */
+footer {
+    margin-top: auto;
+    padding: 20px 0;
+    background-color: #f7fafc;
+    border-top: 1px solid #e2e8f0;
+}
+
+.footer-content {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 20px;
+    text-align: center;
+    color: #718096;
+    font-size: 0.875rem;
+}
+
+/* DataTables Styling */
+.table-container {
+    overflow-x: auto;
+    margin: 20px 0;
+}
+
+.data-table {
+    width: 100% !important;
+}
+
+.data-table thead th {
+    background-color: #f7fafc;
+    font-weight: 600;
+    padding: 12px 8px;
+    border-bottom: 2px solid #e2e8f0;
+}
+
+.data-table tbody td {
+    padding: 8px;
+    vertical-align: middle;
+}
+
+.loading-cell {
+    text-align: center;
+    padding: 40px !important;
+    color: #718096;
+    font-style: italic;
+}
+
+/* Stats Section */
+.stats-section {
+    margin: 20px 0;
+}
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+}
+
+.stat-item {
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 16px;
+    text-align: center;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.stat-number {
+    font-size: 2rem;
+    font-weight: 700;
+    color: #2d3748;
+    margin-bottom: 4px;
+}
+
+.stat-label {
+    font-size: 0.875rem;
+    color: #718096;
+    font-weight: 500;
+}

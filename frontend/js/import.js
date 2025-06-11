@@ -42,8 +42,8 @@ const EventBus = (() => {
  */
 const Config = {
     apiEndpoints: {
-        api: '../../backend/api.php',
-        import: '../../backend/api.php'  // Use main API endpoint for all operations
+        api: 'backend/api.php',
+        import: 'backend/api.php'  // Use main API endpoint for all operations
     },
     limits: {
         maxFileSize: 5 * 1024 * 1024, // 5MB

@@ -1,120 +1,167 @@
 <?php
-/**
- * Root index.php - Entry point with authentication check
- * 
- * This file serves as the entry point for the collaborative calendar application.
- * It now checks authentication and redirects accordingly.
- */
+session_start();
 
-// Set proper headers
-header('Content-Type: text/html; charset=UTF-8');
-
+// Check authentication
 require_once 'backend/database/config.php';
-require_once 'backend/auth/Auth.php';
+require_once 'backend/auth/auth.php';
 
-// Initialize authentication
 $auth = new Auth($pdo);
+$authCheck = $auth->checkAuth();
 
-// Check if user is authenticated
-$authResult = $auth->checkAuth();
-
-if ($authResult['authenticated']) {
-    // User is authenticated, redirect to calendar
-    $frontend_url = './frontend/pages/index.html';
-} else {
-    // User is not authenticated, redirect to login
-    $frontend_url = './frontend/pages/login.html';
+if (!$authCheck['authenticated']) {
+    header('Location: login.php');
+    exit;
 }
 
-// Check if the target file exists
-if (file_exists($frontend_url)) {
-    header("Location: $frontend_url");
-    exit();
-} else {
-    // Fallback error page if frontend is missing
-    http_response_code(404);
-    ?>
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Calendar App - Setup Required</title>
-        <style>
-            body { 
-                font-family: 'Noto Sans', Arial, sans-serif; 
-                text-align: center; 
-                padding: 50px; 
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                min-height: 100vh;
-                margin: 0;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-            }
-            .container { 
-                max-width: 600px; 
-                margin: 0 auto; 
-                background: white; 
-                padding: 40px; 
-                border-radius: 16px; 
-                box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04); 
-            }
-            h1 { color: #e74c3c; margin-bottom: 16px; }
-            p { color: #666; line-height: 1.6; }
-            .setup-list { text-align: left; margin: 20px 0; }
-            .setup-list li { margin: 10px 0; }
-            code { 
-                background: #f7fafc; 
-                padding: 2px 6px; 
-                border-radius: 4px; 
-                font-family: 'Courier New', monospace; 
-                font-size: 0.875rem;
-            }
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <h1>⚠️ Setup Required</h1>
-            <p>The collaborative calendar application requires setup before use.</p>
-            
-            <div class="setup-list">
-                <h3>Setup Steps:</h3>
-                <ol>
-                    <li>Ensure all frontend files are in place:
-                        <ul>
-                            <li><code>frontend/pages/login.html</code></li>
-                            <li><code>frontend/pages/index.html</code></li>
-                            <li><code>frontend/js/auth.js</code></li>
-                            <li><code>frontend/js/script.js</code></li>
-                        </ul>
-                    </li>
-                    <li>Configure your database settings in: <code>backend/database/config.php</code></li>
-                    <li>Import the database schema from: <code>documentation/calendar-app.sql</code></li>
-                    <li>Ensure authentication classes are in place:
-                        <ul>
-                            <li><code>backend/auth/Auth.php</code></li>
-                            <li><code>backend/auth/Session.php</code></li>
-                        </ul>
-                    </li>
-                    <li>Verify your web server has PHP and MySQL enabled</li>
-                </ol>
-            </div>
-            
-            <p>Once setup is complete, refresh this page to access the calendar application.</p>
-            
-            <p><strong>Authentication Features:</strong></p>
-            <ul style="text-align: left; display: inline-block;">
-                <li>User registration and login</li>
-                <li>Remember me functionality</li>
-                <li>Secure session management</li>
-                <li>User-specific calendar events</li>
-                <li>Real-time collaborative features</li>
-            </ul>
-        </div>
-    </body>
-    </html>
-    <?php
-    exit();
-}
+$currentUser = $authCheck['user'];
+
+// Page configuration
+$pageConfig = [
+    'calendar' => [
+        'title' => 'Calendar',
+        'styles' => ['calendar.css'],
+        'scripts' => ['script.js'],
+        'requires' => ['jquery-datetimepicker', 'fullcalendar'],
+        'sidebar' => true
+    ],
+    'events' => [
+        'title' => 'Events',
+        'styles' => ['events.css', 'table.css'],
+        'scripts' => ['events.js'],
+        'requires' => ['datatables'],
+        'sidebar' => false
+    ],
+    'users' => [
+        'title' => 'Users',
+        'styles' => ['table.css'],
+        'scripts' => ['users.js'],
+        'requires' => [],
+        'sidebar' => false
+    ],
+    'import' => [
+        'title' => 'Import',
+        'styles' => ['import.css'],
+        'scripts' => ['import.js'],
+        'requires' => [],
+        'sidebar' => false
+    ]
+];
+
+// Determine which page to display
+$page = isset($_GET['page']) && isset($pageConfig[$_GET['page']]) ? $_GET['page'] : 'calendar';
+$config = $pageConfig[$page];
+
+// External dependencies configuration
+$externalDeps = [
+    'jquery-datetimepicker' => [
+        'css' => ['https://cdnjs.cloudflare.com/ajax/libs/jquery-datetimepicker/2.5.20/jquery.datetimepicker.min.css'],
+        'js' => ['https://cdnjs.cloudflare.com/ajax/libs/jquery-datetimepicker/2.5.20/jquery.datetimepicker.full.min.js']
+    ],
+    'fullcalendar' => [
+        'css' => [],
+        'js' => ['https://cdn.jsdelivr.net/npm/fullcalendar@6.1.17/index.global.min.js']
+    ],
+    'datatables' => [
+        'css' => [
+            'https://cdn.datatables.net/1.13.7/css/dataTables.bootstrap5.min.css',
+            'https://cdn.datatables.net/buttons/2.4.2/css/buttons.bootstrap5.min.css'
+        ],
+        'js' => [
+            'https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js',
+            'https://cdn.datatables.net/1.13.7/js/dataTables.bootstrap5.min.js',
+            'https://cdn.datatables.net/buttons/2.4.2/js/dataTables.buttons.min.js',
+            'https://cdn.datatables.net/buttons/2.4.2/js/buttons.bootstrap5.min.js',
+            'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js',
+            'https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.1.53/pdfmake.min.js',
+            'https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.1.53/vfs_fonts.js',
+            'https://cdn.datatables.net/buttons/2.4.2/js/buttons.html5.min.js',
+            'https://cdn.datatables.net/buttons/2.4.2/js/buttons.print.min.js'
+        ]
+    ]
+];
 ?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><?php echo htmlspecialchars($currentUser['name']); ?>'s <?php echo $config['title']; ?></title>
+    
+    <!-- Google Fonts - Noto Sans -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- jQuery (base requirement) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+    
+    <?php 
+    // Load external dependencies CSS
+    foreach ($config['requires'] as $dep) {
+        if (isset($externalDeps[$dep]['css'])) {
+            foreach ($externalDeps[$dep]['css'] as $css) {
+                echo "<link rel=\"stylesheet\" href=\"{$css}\">\n    ";
+            }
+        }
+    }
+    ?>
+    
+    <!-- Application Styles -->
+    <link rel="stylesheet" href="frontend/css/style.css">
+    <?php 
+    // Load page-specific styles
+    foreach ($config['styles'] as $style) {
+        echo "<link rel=\"stylesheet\" href=\"frontend/css/{$style}\">\n    ";
+    }
+    ?>
+</head>
+<body>
+    <div class="container">
+        <?php include 'frontend/layout/header.php'; ?>
+        
+        <?php if ($config['sidebar']): ?>
+        <div class="calendar-controls">
+            <?php include 'frontend/layout/sidebar.php'; ?>
+        </div>
+        <?php endif; ?>
+
+        <main id="main-content">
+            <?php
+            $pageFile = "pages/{$page}.php";
+            if (file_exists($pageFile)) {
+                include $pageFile;
+            } else {
+                echo '<div class="error-message"><p>Page not found.</p></div>';
+            }
+            ?>
+        </main>
+    </div>
+
+    <?php include 'frontend/layout/footer.php'; ?>
+    
+    <?php 
+    // Load external dependencies JS
+    foreach ($config['requires'] as $dep) {
+        if (isset($externalDeps[$dep]['js'])) {
+            foreach ($externalDeps[$dep]['js'] as $js) {
+                echo "<script src=\"{$js}\"></script>\n    ";
+            }
+        }
+    }
+    ?>
+    
+    <!-- Pass data to JavaScript -->
+    <script>
+        window.currentUser = <?php echo json_encode($currentUser); ?>;
+        window.currentPage = '<?php echo $page; ?>';
+    </script>
+    
+    <!-- Application JavaScript -->
+    <?php 
+    // Load page-specific scripts
+    foreach ($config['scripts'] as $script) {
+        echo "<script src=\"frontend/js/{$script}\"></script>\n    ";
+    }
+    ?>
+</body>
+</html>

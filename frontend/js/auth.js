@@ -6,7 +6,7 @@
 // =============================================================================
 
 const AuthUtils = {
-    apiEndpoint: '../../backend/api.php',
+    apiEndpoint: 'backend/api.php',
     
     /**
      * Make authenticated API request
@@ -93,7 +93,7 @@ const AuthUtils = {
      * Redirect to calendar page
      */
     redirectToCalendar() {
-        window.location.href = './index.html';
+        window.location.href = 'index.php';
     }
 };
 

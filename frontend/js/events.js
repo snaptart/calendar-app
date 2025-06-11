@@ -3,6 +3,48 @@
 // 
 // Comprehensive events table with real-time updates, filtering, and management capabilities
 
+// Export functionality for the events table
+const ExportManager = {
+    exportToCSV() {
+        const table = $('#eventsTable').DataTable();
+        const data = table.data();
+        let csv = 'Title,Start Date/Time,End Date/Time,Duration,Owner,Status\n';
+        
+        data.each(function(row) {
+            csv += `"${row.title}","${row.start}","${row.end}","${row.duration}","${row.owner}","${row.status}"\n`;
+        });
+        
+        this.downloadFile(csv, 'events.csv', 'text/csv');
+    },
+    
+    exportToExcel() {
+        // Use DataTables export functionality
+        $('#eventsTable').DataTable().button('excel').trigger();
+    },
+    
+    exportToPDF() {
+        // Use DataTables export functionality
+        $('#eventsTable').DataTable().button('pdf').trigger();
+    },
+    
+    printTable() {
+        // Use DataTables print functionality
+        $('#eventsTable').DataTable().button('print').trigger();
+    },
+    
+    downloadFile(content, filename, type) {
+        const blob = new Blob([content], { type: type });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+    }
+};
+
 // =============================================================================
 // CORE UTILITIES AND EVENT BUS
 // =============================================================================
@@ -42,8 +84,8 @@ const EventBus = (() => {
  */
 const Config = {
     apiEndpoints: {
-        api: '../../backend/api.php',
-        sse: '../../backend/workers/sse.php'
+        api: 'backend/api.php',
+        sse: 'backend/workers/sse.php'
     },
     sse: {
         maxReconnectAttempts: 10,
@@ -335,7 +377,7 @@ const AuthGuard = (() => {
     };
     
     const redirectToLogin = () => {
-        window.location.href = './login.html';
+        window.location.href = './login.php';
     };
     
     const getCurrentUser = () => currentUser;
@@ -744,7 +786,7 @@ const DataTablesManager = (() => {
                     text: '📄 Export CSV',
                     filename: 'events_export_' + new Date().toISOString().split('T')[0],
                     exportOptions: {
-                        columns: [0, 1, 2, 3, 4, 5] // Exclude actions column
+                        columns: [0, 1, 2, 3, 4, 5] // Exclude actions column (6)
                     }
                 },
                 {
@@ -752,7 +794,7 @@ const DataTablesManager = (() => {
                     text: '📊 Export Excel',
                     filename: 'events_export_' + new Date().toISOString().split('T')[0],
                     exportOptions: {
-                        columns: [0, 1, 2, 3, 4, 5]
+                        columns: [0, 1, 2, 3, 4, 5] // Exclude actions column (6)
                     }
                 },
                 {
