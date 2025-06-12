@@ -84,21 +84,19 @@
                             <!-- Users will be populated dynamically -->
                         </select>
                     </div>
-                </div>
-                
-                <div class="action-buttons">
-                    <button id="refreshEventsBtn" class="btn btn-outline">
-                        <span class="btn-icon">🔄</span>
-                        Refresh Data
-                    </button>
-                    <button id="addEventBtn" class="btn btn-primary">
-                        <span class="btn-icon">+</span>
-                        Add Event
-                    </button>
-                </div>
-                
-                <div class="connection-status">
-                    <span id="connectionStatus" class="status">Connected</span>
+                    
+                    <div class="action-buttons">
+                        <button id="refreshEventsBtn" class="btn btn-outline">
+                            🔄 Refresh Data
+                        </button>
+                        <button id="addEventBtn" class="btn btn-primary">
+                            + Add Event
+                        </button>
+                    </div>
+                    
+                    <div class="connection-status">
+                        <span id="connectionStatus" class="status">Connected</span>
+                    </div>
                 </div>
             </div>
         </div>
@@ -142,8 +140,8 @@
             </div>
         </div>
 
-        <!-- Event Statistics Summary -->
-        <div id="eventsSummary" class="events-summary">
+        <!-- Event Statistics Summary - Hidden as requested -->
+        <div id="eventsSummary" class="events-summary" style="display: none;">
             <div class="summary-cards">
                 <div class="summary-card">
                     <div class="summary-number" id="totalEventsCount">0</div>

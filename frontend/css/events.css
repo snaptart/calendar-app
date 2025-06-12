@@ -48,20 +48,19 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    background: white;
-    padding: 16px 24px;
-    border-radius: 12px;
-    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
-    margin-bottom: 24px;
-    border: 1px solid #e5e7eb;
+    background: #6b7280;
+    padding: 12px 24px;
+    border-radius: 0;
+    margin-bottom: 0;
+    border: none;
 }
 
 .export-btn {
-    background: #6b7280;
+    background: #374151;
     color: white;
     border: none;
     padding: 8px 16px;
-    border-radius: 6px;
+    border-radius: 4px;
     font-size: 0.875rem;
     cursor: pointer;
     display: flex;
@@ -71,7 +70,7 @@
 }
 
 .export-btn:hover {
-    background: #4b5563;
+    background: #1f2937;
 }
 
 .search-box {
@@ -97,14 +96,14 @@
     display: flex;
     gap: 16px;
     align-items: center;
+    justify-content: flex-end;
     flex-wrap: wrap;
-    margin-bottom: 16px;
 }
 
 .filter-group {
     display: flex;
-    flex-direction: column;
-    gap: 4px;
+    align-items: center;
+    gap: 8px;
     min-width: 120px;
 }
 
@@ -114,6 +113,7 @@
     color: #4a5568;
     text-transform: uppercase;
     letter-spacing: 0.025em;
+    white-space: nowrap;
 }
 
 .filter-group select {
@@ -136,6 +136,7 @@
     display: flex;
     gap: 8px;
     align-items: center;
+    margin-left: auto;
 }
 
 /* Navigation Enhancements */
@@ -351,12 +352,24 @@
     padding: 24px 32px;
 }
 
+.table-controls .table-info {
+    margin-bottom: 16px;
+}
+
+.table-controls .table-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+}
+
 /* Table Styling to Match Screenshot */
 .table-wrapper {
     background: white;
-    border-radius: 12px;
+    border-radius: 0;
     box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
     border: 1px solid #e5e7eb;
+    border-top: none;
     overflow: hidden;
 }
 
@@ -402,12 +415,6 @@
     border: 1px solid #bbf7d0;
 }
 
-.table-controls .table-actions {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    gap: 16px;
-}
 
 /* Loading States for Events */
 .loading-event-row {

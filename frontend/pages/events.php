@@ -3,21 +3,8 @@
 // This page is included by index.php, so all variables and authentication are already available
 ?>
 
-<div class="page-header">
-    <h2>All Events</h2>
-    <div class="header-actions">
-        <button class="btn btn-primary" onclick="window.location.href='index.php'">
-            <span class="btn-icon">📅</span>
-            Back to Calendar
-        </button>
-        <button class="btn btn-outline" id="exportBtn">
-            <span class="btn-icon">📤</span>
-            Export Events
-        </button>
-    </div>
-</div>
 
-<div class="stats-section">
+<div class="stats-section" style="display: none;">
     <div class="stats-grid">
         <div class="stat-item">
             <div class="stat-number" id="totalEventsCount">0</div>
@@ -38,29 +25,53 @@
     </div>
 </div>
 
-<div class="filters-section">
-    <div class="filter-group">
-        <label for="userFilter">Filter by User:</label>
-        <select id="userFilter" class="filter-select">
-            <option value="">All Users</option>
-        </select>
-    </div>
-    <div class="filter-group">
-        <label for="dateFilter">Date Range:</label>
-        <select id="dateFilter" class="filter-select">
-            <option value="all">All Time</option>
-            <option value="today">Today</option>
-            <option value="week">This Week</option>
-            <option value="month">This Month</option>
-            <option value="custom">Custom Range</option>
-        </select>
-    </div>
-    <div class="filter-group" id="customDateRange" style="display: none;">
-        <input type="date" id="startDate" class="filter-input">
-        <span>to</span>
-        <input type="date" id="endDate" class="filter-input">
+<div class="calendar-events-section">
+    <div class="section-header">
+        <div class="section-info">
+            <h3>Calendar Events</h3>
+            <p class="section-description">View and manage calendar events with advanced filtering and search</p>
+        </div>
+        <div class="section-controls">
+            <div class="filter-controls">
+                <div class="filter-group">
+                    <label for="viewFilter">VIEW:</label>
+                    <select id="viewFilter" class="filter-select">
+                        <option value="all">All Events</option>
+                        <option value="my">My Events Only</option>
+                        <option value="others">Others' Events</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label for="statusFilter">STATUS:</label>
+                    <select id="statusFilter" class="filter-select">
+                        <option value="">All Status</option>
+                        <option value="upcoming">Upcoming</option>
+                        <option value="ongoing">Ongoing</option>
+                        <option value="past">Past</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label for="userFilter">USER:</label>
+                    <select id="userFilter" class="filter-select">
+                        <option value="">All Users</option>
+                    </select>
+                </div>
+                <div class="action-buttons">
+                    <button id="refreshEventsBtn" class="btn btn-outline">
+                        🔄 Refresh Data
+                    </button>
+                    <button id="addEventBtn" class="btn btn-primary">
+                        + Add Event
+                    </button>
+                </div>
+                <div class="connection-status">
+                    <span id="connectionStatus" class="status">Connected</span>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
+
 
 <div class="table-container">
     <table id="eventsTable" class="data-table">
