@@ -306,21 +306,43 @@ class CalendarUpdate {
             }
         }
         
-        // Also check for recent duplicates in database (last 10 seconds)
+        // Check for actual duplicates in database (same event data, not just same event ID)
+        // Only check within a shorter time window (2 seconds) to allow legitimate rapid updates
         if (isset($eventData['id'])) {
             try {
                 $stmt = $this->pdo->prepare("
-                    SELECT COUNT(*) FROM event_updates 
+                    SELECT event_data FROM event_updates 
                     WHERE event_type = ? 
                     AND JSON_EXTRACT(event_data, '$.id') = ? 
-                    AND created_at > DATE_SUB(NOW(), INTERVAL 10 SECOND)
+                    AND created_at > DATE_SUB(NOW(), INTERVAL 2 SECOND)
+                    ORDER BY created_at DESC
+                    LIMIT 1
                 ");
                 $stmt->execute([$eventType, $eventData['id']]);
-                $recentCount = $stmt->fetchColumn();
+                $recentRecord = $stmt->fetch();
                 
-                if ($recentCount > 0) {
-                    error_log("Preventing database duplicate: {$eventType} for event ID {$eventData['id']} (found {$recentCount} recent records)");
-                    return true;
+                if ($recentRecord) {
+                    $recentData = json_decode($recentRecord['event_data'], true);
+                    
+                    // Compare actual event data to determine if it's truly a duplicate
+                    $currentDataHash = md5(json_encode([
+                        'title' => $eventData['title'] ?? '',
+                        'start' => $eventData['start'] ?? '',
+                        'end' => $eventData['end'] ?? '',
+                        'backgroundColor' => $eventData['backgroundColor'] ?? ''
+                    ]));
+                    
+                    $recentDataHash = md5(json_encode([
+                        'title' => $recentData['title'] ?? '',
+                        'start' => $recentData['start'] ?? '',
+                        'end' => $recentData['end'] ?? '',
+                        'backgroundColor' => $recentData['backgroundColor'] ?? ''
+                    ]));
+                    
+                    if ($currentDataHash === $recentDataHash) {
+                        error_log("Preventing true duplicate: {$eventType} for event ID {$eventData['id']} (identical data)");
+                        return true;
+                    }
                 }
             } catch (Exception $e) {
                 error_log("Error checking database duplicates: " . $e->getMessage());
