@@ -16,7 +16,23 @@ header('Access-Control-Allow-Headers: Cache-Control');
 require_once '../database/config.php';
 
 // Keep track of last sent update ID
+// If no lastEventId is provided (initial connection), start from the latest ID
+// to avoid replaying historical updates
 $lastId = isset($_GET['lastEventId']) ? (int)$_GET['lastEventId'] : 0;
+
+// For initial connections (lastEventId = 0), get the latest update ID to start from
+if ($lastId === 0) {
+    try {
+        $stmt = $pdo->prepare("SELECT MAX(id) as max_id FROM event_updates");
+        $stmt->execute();
+        $result = $stmt->fetch();
+        $lastId = $result['max_id'] ? (int)$result['max_id'] : 0;
+        logSSEEvent("Initial connection - starting from latest update ID: $lastId");
+    } catch (Exception $e) {
+        logSSEEvent("Error getting latest update ID: " . $e->getMessage());
+        $lastId = 0;
+    }
+}
 
 /**
  * Send SSE message to client
