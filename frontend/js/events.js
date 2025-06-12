@@ -779,7 +779,8 @@ const DataTablesManager = (() => {
             pageLength: 25,
             lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "All"]],
             order: [[1, 'asc']], // Sort by Start Date (upcoming first)
-            dom: 'Bfrtip',
+            dom: '<"top"<"entries-section"l><"search-section"f>>Brt<"bottom"<"info-section"i><"pagination-section"p>>',
+            pagingType: 'simple_numbers',
             buttons: [
                 {
                     extend: 'csv',

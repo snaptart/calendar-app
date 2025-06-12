@@ -34,16 +34,16 @@
         <div class="section-controls">
             <div class="filter-controls">
                 <div class="filter-group">
-                    <label for="viewFilter">VIEW:</label>
-                    <select id="viewFilter" class="filter-select">
+                    <label for="eventViewFilter">VIEW:</label>
+                    <select id="eventViewFilter" class="filter-select">
                         <option value="all">All Events</option>
                         <option value="my">My Events Only</option>
                         <option value="others">Others' Events</option>
                     </select>
                 </div>
                 <div class="filter-group">
-                    <label for="statusFilter">STATUS:</label>
-                    <select id="statusFilter" class="filter-select">
+                    <label for="eventStatusFilter">STATUS:</label>
+                    <select id="eventStatusFilter" class="filter-select">
                         <option value="">All Status</option>
                         <option value="upcoming">Upcoming</option>
                         <option value="ongoing">Ongoing</option>
@@ -51,8 +51,8 @@
                     </select>
                 </div>
                 <div class="filter-group">
-                    <label for="userFilter">USER:</label>
-                    <select id="userFilter" class="filter-select">
+                    <label for="eventUserFilter">USER:</label>
+                    <select id="eventUserFilter" class="filter-select">
                         <option value="">All Users</option>
                     </select>
                 </div>
@@ -92,35 +92,42 @@
     </table>
 </div>
 
-<!-- Edit Event Modal -->
-<div id="editEventModal" class="modal">
+<!-- Event Modal -->
+<div id="eventModal" class="modal">
     <div class="modal-content">
         <div class="modal-header">
-            <h2>Edit Event</h2>
+            <h2 id="modalTitle">Event Details</h2>
             <span class="close">&times;</span>
         </div>
         <div class="modal-body">
-            <form id="editEventForm">
-                <input type="hidden" id="editEventId">
-                <div class="form-group">
-                    <label for="editEventTitle">Event Title</label>
-                    <input type="text" id="editEventTitle" required>
-                </div>
-                <div class="form-row">
+            <!-- Event Details View -->
+            <div id="eventDetails">
+                <!-- Content populated by JavaScript -->
+            </div>
+            
+            <!-- Event Edit Form -->
+            <div id="eventForm" style="display: none;">
+                <form id="editEventForm">
                     <div class="form-group">
-                        <label for="editEventStart">Start Date & Time</label>
-                        <input type="datetime-local" id="editEventStart" required>
+                        <label for="eventTitle">Event Title</label>
+                        <input type="text" id="eventTitle" required>
                     </div>
-                    <div class="form-group">
-                        <label for="editEventEnd">End Date & Time</label>
-                        <input type="datetime-local" id="editEventEnd" required>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="eventStart">Start Date & Time</label>
+                            <input type="datetime-local" id="eventStart" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="eventEnd">End Date & Time</label>
+                            <input type="datetime-local" id="eventEnd" required>
+                        </div>
                     </div>
-                </div>
-                <div class="form-actions">
-                    <button type="submit" class="btn btn-primary">Save Changes</button>
-                    <button type="button" class="btn btn-outline" onclick="closeEditModal()">Cancel</button>
-                </div>
-            </form>
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn-primary">Save Changes</button>
+                        <button type="button" id="cancelEditBtn" class="btn btn-outline">Cancel</button>
+                    </div>
+                </form>
+            </div>
         </div>
     </div>
 </div>
