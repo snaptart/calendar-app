@@ -376,6 +376,45 @@ header h1 {
     padding: 24px 32px 32px;
 }
 
+.modal-footer {
+    padding: 16px 32px 24px;
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    border-top: 1px solid #e2e8f0;
+}
+
+/* Confirmation Modal Specific Styles */
+.confirm-modal .modal-content {
+    max-width: 400px;
+}
+
+.confirm-modal .modal-dialog {
+    margin-top: 15vh;
+}
+
+.confirm-modal .modal-body {
+    text-align: center;
+    font-size: 1rem;
+    color: #374151;
+    line-height: 1.5;
+}
+
+.confirm-modal .modal-body p {
+    margin: 0;
+}
+
+.confirm-modal .modal-footer {
+    background: #f9fafb;
+    border-bottom-left-radius: 12px;
+    border-bottom-right-radius: 12px;
+}
+
+/* Small size modal */
+.modal-small .modal-content {
+    max-width: 400px;
+}
+
 /* Form Styles */
 .form-group {
     margin-bottom: 20px;

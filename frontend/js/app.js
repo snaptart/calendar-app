@@ -48,6 +48,9 @@ export const CollaborativeCalendarApp = (() => {
         
         // Initialize components in order
         DateTimeManager.initializeDateTimePickers();
+        
+        // Make ModalManager globally available for header logout
+        window.ModalManager = ModalManager;
         CalendarManager.initializeCalendar();
         ModalManager.setupEventListeners();
         setupUIEventListeners();

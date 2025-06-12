@@ -20,7 +20,7 @@ $pageConfig = [
     'calendar' => [
         'title' => 'Calendar',
         'styles' => ['calendar.css'],
-        'scripts' => ['script.js'],
+        'scripts' => ['calendar.js'],
         'requires' => ['jquery-datetimepicker', 'fullcalendar'],
         'sidebar' => true
     ],
@@ -161,7 +161,7 @@ $externalDeps = [
     // Load page-specific scripts
     foreach ($config['scripts'] as $script) {
         // Load modular scripts as ES6 modules for imports (except simplified events.js)
-        if (in_array($script, ['script.js', 'users.js', 'import.js'])) {
+        if (in_array($script, ['calendar.js', 'users.js', 'import.js'])) {
             echo "<script type=\"module\" src=\"frontend/js/{$script}\"></script>\n    ";
         } else {
             echo "<script src=\"frontend/js/{$script}\"></script>\n    ";

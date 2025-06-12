@@ -4,6 +4,7 @@
  */
 import { EventBus } from '../core/event-bus.js';
 import { AuthGuard } from '../auth/auth-guard.js';
+import { ModalManager } from './modal-manager.js';
 
 export const UIManager = (() => {
     const updateConnectionStatus = (message, className = '') => {
@@ -115,8 +116,16 @@ export const UIManager = (() => {
             logoutBtn.textContent = 'Logout';
             logoutBtn.style.marginLeft = '8px';
             
-            logoutBtn.addEventListener('click', () => {
-                if (confirm('Are you sure you want to logout?')) {
+            logoutBtn.addEventListener('click', async () => {
+                const confirmed = await ModalManager.confirm({
+                    title: 'Confirm Logout',
+                    message: 'Are you sure you want to logout?',
+                    confirmText: 'Logout',
+                    cancelText: 'Cancel',
+                    confirmClass: 'btn-danger'
+                });
+                
+                if (confirmed) {
                     AuthGuard.logout();
                 }
             });

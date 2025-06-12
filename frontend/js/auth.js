@@ -127,12 +127,12 @@ const AuthManager = {
             
             // Validate inputs
             if (!email || !AuthUtils.validateEmail(email)) {
-                AuthUtils.showFormError('email', 'Please enter a valid email address');
+                AuthUtils.showFormError('loginEmail', 'Please enter a valid email address');
                 return false;
             }
             
             if (!password || !AuthUtils.validatePassword(password)) {
-                AuthUtils.showFormError('password', 'Password must be at least 6 characters');
+                AuthUtils.showFormError('loginPassword', 'Password must be at least 6 characters');
                 return false;
             }
             
@@ -149,7 +149,7 @@ const AuthManager = {
             
             if (response.success) {
                 // Successful login - redirect to main application
-                window.location.href = response.redirect || 'pages/calendar.php';
+                window.location.href = response.redirect || 'index.php';
                 return true;
             } else {
                 throw new Error(response.error || 'Login failed');
@@ -174,17 +174,17 @@ const AuthManager = {
             
             // Validate inputs
             if (!name || name.trim().length < 2) {
-                AuthUtils.showFormError('name', 'Name must be at least 2 characters');
+                AuthUtils.showFormError('registerName', 'Name must be at least 2 characters');
                 return false;
             }
             
             if (!email || !AuthUtils.validateEmail(email)) {
-                AuthUtils.showFormError('email', 'Please enter a valid email address');
+                AuthUtils.showFormError('registerEmail', 'Please enter a valid email address');
                 return false;
             }
             
             if (!password || !AuthUtils.validatePassword(password)) {
-                AuthUtils.showFormError('password', 'Password must be at least 6 characters');
+                AuthUtils.showFormError('registerPassword', 'Password must be at least 6 characters');
                 return false;
             }
             
@@ -225,18 +225,28 @@ const AuthManager = {
      * Switch between login and registration forms
      */
     switchToLogin() {
-        document.getElementById('loginForm')?.classList.remove('hidden');
-        document.getElementById('registerForm')?.classList.add('hidden');
-        document.getElementById('loginTab')?.classList.add('active');
-        document.getElementById('registerTab')?.classList.remove('active');
+        document.getElementById('loginForm')?.classList.add('active');
+        document.getElementById('registerForm')?.classList.remove('active');
+        document.querySelectorAll('.auth-tab').forEach(tab => {
+            if (tab.getAttribute('data-tab') === 'login') {
+                tab.classList.add('active');
+            } else {
+                tab.classList.remove('active');
+            }
+        });
         AuthUtils.clearFormErrors();
     },
     
     switchToRegister() {
-        document.getElementById('loginForm')?.classList.add('hidden');
-        document.getElementById('registerForm')?.classList.remove('hidden');
-        document.getElementById('loginTab')?.classList.remove('active');
-        document.getElementById('registerTab')?.classList.add('active');
+        document.getElementById('loginForm')?.classList.remove('active');
+        document.getElementById('registerForm')?.classList.add('active');
+        document.querySelectorAll('.auth-tab').forEach(tab => {
+            if (tab.getAttribute('data-tab') === 'register') {
+                tab.classList.add('active');
+            } else {
+                tab.classList.remove('active');
+            }
+        });
         AuthUtils.clearFormErrors();
     },
     
@@ -244,11 +254,14 @@ const AuthManager = {
      * Show authentication success message
      */
     showAuthSuccess(message) {
-        const alertDiv = document.getElementById('authAlert');
+        const alertDiv = document.getElementById('successMessage');
         if (alertDiv) {
-            alertDiv.className = 'alert alert-success';
             alertDiv.textContent = message;
             alertDiv.style.display = 'block';
+            
+            // Hide error message
+            const errorDiv = document.getElementById('errorMessage');
+            if (errorDiv) errorDiv.style.display = 'none';
             
             // Auto-hide after 5 seconds
             setTimeout(() => {
@@ -261,11 +274,14 @@ const AuthManager = {
      * Show authentication error message
      */
     showAuthError(message) {
-        const alertDiv = document.getElementById('authAlert');
+        const alertDiv = document.getElementById('errorMessage');
         if (alertDiv) {
-            alertDiv.className = 'alert alert-error';
             alertDiv.textContent = message;
             alertDiv.style.display = 'block';
+            
+            // Hide success message
+            const successDiv = document.getElementById('successMessage');
+            if (successDiv) successDiv.style.display = 'none';
         }
     }
 };
@@ -280,20 +296,23 @@ const AuthEventHandlers = {
      */
     init() {
         // Tab switching
-        document.getElementById('loginTab')?.addEventListener('click', () => {
-            AuthManager.switchToLogin();
-        });
-        
-        document.getElementById('registerTab')?.addEventListener('click', () => {
-            AuthManager.switchToRegister();
+        document.querySelectorAll('.auth-tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                const tabType = tab.getAttribute('data-tab');
+                if (tabType === 'login') {
+                    AuthManager.switchToLogin();
+                } else if (tabType === 'register') {
+                    AuthManager.switchToRegister();
+                }
+            });
         });
         
         // Form submissions
         document.getElementById('loginForm')?.addEventListener('submit', async (e) => {
             e.preventDefault();
             
-            const email = document.getElementById('email')?.value;
-            const password = document.getElementById('password')?.value;
+            const email = document.getElementById('loginEmail')?.value;
+            const password = document.getElementById('loginPassword')?.value;
             const rememberMe = document.getElementById('rememberMe')?.checked;
             
             await AuthManager.login(email, password, rememberMe);
@@ -302,7 +321,7 @@ const AuthEventHandlers = {
         document.getElementById('registerForm')?.addEventListener('submit', async (e) => {
             e.preventDefault();
             
-            const name = document.getElementById('name')?.value;
+            const name = document.getElementById('registerName')?.value;
             const email = document.getElementById('registerEmail')?.value;
             const password = document.getElementById('registerPassword')?.value;
             const confirmPassword = document.getElementById('confirmPassword')?.value;
@@ -322,7 +341,10 @@ const AuthEventHandlers = {
         });
         
         // Hide alerts on click
-        document.getElementById('authAlert')?.addEventListener('click', function() {
+        document.getElementById('errorMessage')?.addEventListener('click', function() {
+            this.style.display = 'none';
+        });
+        document.getElementById('successMessage')?.addEventListener('click', function() {
             this.style.display = 'none';
         });
     }

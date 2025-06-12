@@ -406,9 +406,19 @@ export const ModalManager = (() => {
         });
         
         // Delete event
-        deleteBtn?.addEventListener('click', () => {
-            if (currentEvent && confirm('Are you sure you want to delete this event?')) {
-                EventBus.emit('event:delete', { eventId: currentEvent.id });
+        deleteBtn?.addEventListener('click', async () => {
+            if (currentEvent) {
+                const confirmed = await confirm({
+                    title: 'Delete Event',
+                    message: 'Are you sure you want to delete this event? This action cannot be undone.',
+                    confirmText: 'Delete',
+                    cancelText: 'Cancel',
+                    confirmClass: 'btn-danger'
+                });
+                
+                if (confirmed) {
+                    EventBus.emit('event:delete', { eventId: currentEvent.id });
+                }
             }
         });
     };
@@ -448,9 +458,94 @@ export const ModalManager = (() => {
     EventBus.on('event:saved', closeModal);
     EventBus.on('event:deleted', closeModal);
     
+    /**
+     * Show a confirmation dialog
+     */
+    const confirm = (options = {}) => {
+        return new Promise((resolve) => {
+            const defaultOptions = {
+                title: 'Confirm Action',
+                message: 'Are you sure?',
+                confirmText: 'Confirm',
+                cancelText: 'Cancel',
+                confirmClass: 'btn-danger',
+                cancelClass: 'btn-secondary'
+            };
+            
+            const config = { ...defaultOptions, ...options };
+            
+            const footer = `
+                <button type="button" class="btn ${config.cancelClass}" data-action="cancel">
+                    ${config.cancelText}
+                </button>
+                <button type="button" class="btn ${config.confirmClass}" data-action="confirm">
+                    ${config.confirmText}
+                </button>
+            `;
+            
+            const modalApi = create({
+                title: config.title,
+                body: `<p>${config.message}</p>`,
+                footer: footer,
+                size: 'small',
+                closable: false,
+                backdrop: false,
+                keyboard: true,
+                className: 'confirm-modal'
+            });
+            
+            const modalId = modalApi.getId();
+            const modal = modalApi.getElement();
+            
+            if (!modal) {
+                console.error('Modal element not found');
+                resolve(false);
+                return;
+            }
+            
+            // Handle button clicks
+            const handleClick = (e) => {
+                const action = e.target.getAttribute('data-action');
+                if (action === 'confirm') {
+                    resolve(true);
+                    modalApi.hide();
+                    setTimeout(() => modalApi.destroy(), 300);
+                } else if (action === 'cancel') {
+                    resolve(false);
+                    modalApi.hide();
+                    setTimeout(() => modalApi.destroy(), 300);
+                }
+            };
+            
+            modal.addEventListener('click', handleClick);
+            
+            // Handle keyboard escape
+            const handleKeydown = (e) => {
+                if (e.key === 'Escape') {
+                    resolve(false);
+                    modalApi.hide();
+                    setTimeout(() => modalApi.destroy(), 300);
+                    document.removeEventListener('keydown', handleKeydown);
+                }
+            };
+            
+            document.addEventListener('keydown', handleKeydown);
+            
+            // Show the modal
+            modalApi.show();
+            
+            // Focus the confirm button
+            setTimeout(() => {
+                const confirmBtn = modal.querySelector('[data-action="confirm"]');
+                if (confirmBtn) confirmBtn.focus();
+            }, 300);
+        });
+    };
+
     return {
         // Generic modal API
         create,
+        confirm,
         closeActive,
         closeAll,
         getOpenModals,

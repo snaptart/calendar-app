@@ -43,7 +43,7 @@
                     </label>
                 </div>
                 
-                <button type="submit" class="btn btn-primary btn-full">Sign In</button>
+                <button type="submit" id="loginBtn" class="btn btn-primary btn-full">Sign In</button>
             </form>
             
             <!-- Register Form -->
@@ -68,7 +68,7 @@
                     <input type="password" id="confirmPassword" placeholder="Confirm your password" autocomplete="new-password" required>
                 </div>
                 
-                <button type="submit" class="btn btn-primary btn-full">Create Account</button>
+                <button type="submit" id="registerBtn" class="btn btn-primary btn-full">Create Account</button>
             </form>
             
             <!-- Message containers -->
@@ -78,6 +78,6 @@
     </div>
     
     <!-- Application JavaScript -->
-    <script src="frontend/js/auth.js"></script>
+    <script type="module" src="frontend/js/auth.js"></script>
 </body>
 </html>
