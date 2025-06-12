@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a collaborative calendar application with a PHP backend and HTML/JavaScript frontend. The application is part of the "itmdev" (Ice Time Management Development) system.
+This is a collaborative calendar application with a PHP backend and PHP/JavaScript frontend. The application is part of the "itmdev" (Ice Time Management Development) system.
 
 We are building an ice time management web app with three types of users:
 1. an arena administrator, who manages and distributes ice time available at an ice arena for one or more rinks at the arena
