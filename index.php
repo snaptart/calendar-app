@@ -33,9 +33,9 @@ $pageConfig = [
     ],
     'users' => [
         'title' => 'Users',
-        'styles' => ['table.css'],
+        'styles' => ['events.css', 'table.css'],
         'scripts' => ['users.js'],
-        'requires' => [],
+        'requires' => ['datatables'],
         'sidebar' => false
     ],
     'import' => [

@@ -1094,14 +1094,19 @@ const EventModalManager = (() => {
     let editMode = false;
     
     const openModal = (eventId, mode = 'view') => {
-        const event = EventsDataManager.getEventsData().find(e => e.id == eventId);
-        if (!event) {
-            UIManager.showError('Event not found');
-            return;
+        if (mode === 'create') {
+            currentEvent = null;
+            editMode = true;
+        } else {
+            const event = EventsDataManager.getEventsData().find(e => e.id == eventId);
+            if (!event) {
+                UIManager.showError('Event not found');
+                return;
+            }
+            
+            currentEvent = event;
+            editMode = mode === 'edit';
         }
-        
-        currentEvent = event;
-        editMode = mode === 'edit';
         
         const modal = document.getElementById('eventModal');
         const modalTitle = document.getElementById('modalTitle');
@@ -1111,18 +1116,26 @@ const EventModalManager = (() => {
         if (!modal) return;
         
         // Set modal title
-        modalTitle.textContent = editMode ? 'Edit Event' : 'Event Details';
+        if (mode === 'create') {
+            modalTitle.textContent = 'Create New Event';
+        } else {
+            modalTitle.textContent = editMode ? 'Edit Event' : 'Event Details';
+        }
         
         if (editMode) {
             // Show form, hide details
             eventDetails.style.display = 'none';
             eventForm.style.display = 'block';
-            populateEditForm(event);
+            if (mode === 'create') {
+                populateCreateForm();
+            } else {
+                populateEditForm(currentEvent);
+            }
         } else {
             // Show details, hide form
             eventDetails.style.display = 'block';
             eventForm.style.display = 'none';
-            populateEventDetails(event);
+            populateEventDetails(currentEvent);
         }
         
         modal.style.display = 'block';
@@ -1178,6 +1191,18 @@ const EventModalManager = (() => {
         `;
     };
     
+    const populateCreateForm = () => {
+        document.getElementById('eventTitle').value = '';
+        
+        // Set default start time to current time rounded to next hour
+        const now = new Date();
+        const startTime = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours() + 1, 0);
+        const endTime = new Date(startTime.getTime() + (60 * 60 * 1000)); // 1 hour later
+        
+        document.getElementById('eventStart').value = formatDateTimeLocal(startTime);
+        document.getElementById('eventEnd').value = formatDateTimeLocal(endTime);
+    };
+
     const populateEditForm = (event) => {
         document.getElementById('eventTitle').value = event.title;
         
@@ -1226,8 +1251,6 @@ const EventModalManager = (() => {
     };
     
     const saveEvent = async () => {
-        if (!currentEvent) return;
-        
         try {
             const title = document.getElementById('eventTitle').value.trim();
             const start = document.getElementById('eventStart').value;
@@ -1239,14 +1262,22 @@ const EventModalManager = (() => {
             }
             
             const eventData = {
-                id: currentEvent.id,
                 title: title,
                 start: start + ':00', // Add seconds
                 end: end + ':00'
             };
             
-            await APIClient.updateEvent(eventData);
-            EventBus.emit('event:saved', { message: 'Event updated successfully' });
+            if (currentEvent) {
+                // Updating existing event
+                eventData.id = currentEvent.id;
+                await APIClient.updateEvent(eventData);
+                EventBus.emit('event:saved', { message: 'Event updated successfully' });
+            } else {
+                // Creating new event
+                await APIClient.createEvent(eventData);
+                EventBus.emit('event:saved', { message: 'Event created successfully' });
+            }
+            
             closeModal();
             EventsDataManager.refreshData();
             
@@ -1474,7 +1505,7 @@ const EventsApp = (() => {
         // Add event button
         const addEventBtn = document.getElementById('addEventBtn');
         addEventBtn?.addEventListener('click', () => {
-            window.location.href = '../index.php'; // Redirect to calendar for event creation
+            EventModalManager.openModal(null, 'create');
         });
         
         // Table row action handlers

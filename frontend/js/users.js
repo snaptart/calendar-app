@@ -166,6 +166,7 @@ const Utils = {
             id: user.id || 0,
             name: user.name || 'Unknown User',
             email: user.email || null,
+            role: user.role_name || user.role || 'Calendar User',
             color: user.color || '#3498db',
             created_at: user.created_at || null,
             last_login: user.last_login || null,
@@ -272,7 +273,7 @@ const AuthGuard = (() => {
     };
     
     const redirectToLogin = () => {
-        window.location.href = './login.html';
+        window.location.href = '../login.php';
     };
     
     const getCurrentUser = () => currentUser;
@@ -413,6 +414,13 @@ const UIManager = (() => {
         }
     };
     
+    const updateUsersSummary = (stats) => {
+        document.getElementById('totalUsersCount').textContent = stats.total || 0;
+        document.getElementById('activeUsersCount').textContent = stats.active || 0;
+        document.getElementById('newUsersCount').textContent = stats.new || 0;
+        document.getElementById('adminUsersCount').textContent = stats.admin || 0;
+    };
+    
     // Event listeners
     EventBus.on('connection:status', ({ status, message }) => {
         updateConnectionStatus(message, status);
@@ -441,7 +449,8 @@ const UIManager = (() => {
         showLoadingOverlay,
         hideLoadingOverlay,
         showError,
-        setupAuthenticatedUI
+        setupAuthenticatedUI,
+        updateUsersSummary
     };
 })();
 
@@ -512,13 +521,65 @@ const UsersDataManager = (() => {
     
     const getUsersData = () => usersData;
     
+    const calculateSummaryStats = () => {
+        const stats = {
+            total: usersData.length,
+            active: 0,
+            recent: 0,
+            inactive: 0,
+            new: 0,
+            guest: 0,
+            admin: 0
+        };
+        
+        usersData.forEach(user => {
+            const status = user.status || Utils.getUserStatus(user);
+            
+            if (status === 'active') {
+                stats.active++;
+            } else if (status === 'recent') {
+                stats.recent++;
+            } else if (status === 'inactive') {
+                stats.inactive++;
+            } else if (status === 'new') {
+                stats.new++;
+            } else if (status === 'guest') {
+                stats.guest++;
+            }
+            
+            // Check for admin role
+            if (user.role === 'Admin' || user.role === 'Administrator') {
+                stats.admin++;
+            }
+        });
+        
+        return stats;
+    };
+    
     const getLastFetchTime = () => lastFetchTime;
+    
+    const getFilteredUsers = () => {
+        let filtered = [...usersData];
+        
+        // Apply filters if any are set
+        // This will be used by FilterManager
+        
+        return filtered;
+    };
+    
+    const updateFilters = (newFilters) => {
+        // Filter logic will be implemented here
+        EventBus.emit('users:filtered', { users: getFilteredUsers() });
+    };
     
     return {
         loadUsersData,
         refreshData,
         getUsersData,
-        getLastFetchTime
+        getLastFetchTime,
+        calculateSummaryStats,
+        getFilteredUsers,
+        updateFilters
     };
 })();
 
@@ -544,15 +605,16 @@ const DataTablesManager = (() => {
             responsive: true,
             pageLength: 25,
             lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "All"]],
-            order: [[4, 'desc']], // Sort by Member Since (newest first)
-            dom: 'Bfrtip',
+            order: [[5, 'desc']], // Sort by Member Since (newest first)
+            dom: '<"top"<"entries-section"l><"search-section"f>>Brt<"bottom"<"info-section"i><"pagination-section"p>>',
+            pagingType: 'simple_numbers',
             buttons: [
                 {
                     extend: 'csv',
                     text: '📄 Export CSV',
                     filename: 'users_export_' + new Date().toISOString().split('T')[0],
                     exportOptions: {
-                        columns: [1, 2, 3, 4, 5, 6] // Exclude color column
+                        columns: [1, 2, 3, 4, 5, 6, 7] // Exclude color column (0) and actions column (8)
                     }
                 },
                 {
@@ -593,14 +655,38 @@ const DataTablesManager = (() => {
                     width: '60px'
                 },
                 {
-                    targets: 3, // Events Created column
-                    className: 'text-center',
-                    width: '120px'
+                    targets: 1, // Name column
+                    width: '20%'
                 },
                 {
-                    targets: 6, // Status column
+                    targets: 2, // Email column
+                    width: '20%'
+                },
+                {
+                    targets: 3, // Role column
+                    width: '12%'
+                },
+                {
+                    targets: 4, // Events Count column
                     className: 'text-center',
-                    width: '100px'
+                    width: '10%'
+                },
+                {
+                    targets: [5, 6], // Date columns
+                    width: '15%',
+                    className: 'text-nowrap'
+                },
+                {
+                    targets: 7, // Status column
+                    className: 'text-center',
+                    width: '10%'
+                },
+                {
+                    targets: 8, // Actions column
+                    orderable: false,
+                    searchable: false,
+                    className: 'text-center',
+                    width: '120px'
                 }
             ],
             language: {
@@ -651,10 +737,12 @@ const DataTablesManager = (() => {
                     createColorIndicator(validatedUser.color),
                     validatedUser.name,
                     validatedUser.email || 'No email',
+                    validatedUser.role || 'Calendar User',
                     createEventCountBadge(validatedUser.event_count),
                     Utils.formatDateShort(validatedUser.created_at),
                     Utils.getTimeAgo(validatedUser.last_login),
-                    createStatusBadge(validatedUser.status)
+                    createStatusBadge(validatedUser.status),
+                    createActionsCell(validatedUser)
                 ];
                 
                 dataTable.row.add(row);
@@ -667,6 +755,10 @@ const DataTablesManager = (() => {
         dataTable.draw();
         
         console.log(`Successfully loaded ${users.length} users into DataTable`);
+        
+        // Update summary stats
+        const stats = UsersDataManager.calculateSummaryStats();
+        UIManager.updateUsersSummary(stats);
     };
     
     const createColorIndicator = (color) => {
@@ -701,6 +793,19 @@ const DataTablesManager = (() => {
         return `<span class="status-badge ${statusInfo.class}">${statusInfo.text}</span>`;
     };
     
+    const createActionsCell = (user) => {
+        const currentUser = AuthGuard.getCurrentUser();
+        const canEdit = currentUser && (currentUser.role === 'Admin' || currentUser.id === user.id);
+        
+        let actions = `<button class="btn btn-small btn-outline view-user-btn" data-user-id="${user.id}">👁️ View</button>`;
+        
+        if (canEdit) {
+            actions += ` <button class="btn btn-small btn-primary edit-user-btn" data-user-id="${user.id}">✏️ Edit</button>`;
+        }
+        
+        return `<div class="actions-cell">${actions}</div>`;
+    };
+    
     const refreshTable = () => {
         if (dataTable) {
             // Instead of ajax reload, we'll trigger a data refresh
@@ -715,6 +820,252 @@ const DataTablesManager = (() => {
         loadData,
         refreshTable,
         getDataTable
+    };
+})();
+
+// =============================================================================
+// FILTER MANAGER
+// =============================================================================
+
+/**
+ * Manages filtering controls for users
+ */
+const FilterManager = (() => {
+    const initializeFilters = () => {
+        // Set up filter event listeners
+        setupFilterEventListeners();
+    };
+    
+    const setupFilterEventListeners = () => {
+        // Status filter
+        const statusFilter = document.getElementById('userStatusFilter');
+        if (statusFilter) {
+            statusFilter.addEventListener('change', (e) => {
+                UsersDataManager.updateFilters({ status: e.target.value });
+            });
+        }
+        
+        // Role filter
+        const roleFilter = document.getElementById('userRoleFilter');
+        if (roleFilter) {
+            roleFilter.addEventListener('change', (e) => {
+                UsersDataManager.updateFilters({ role: e.target.value });
+            });
+        }
+    };
+    
+    const resetFilters = () => {
+        document.getElementById('userStatusFilter').value = '';
+        document.getElementById('userRoleFilter').value = '';
+        
+        UsersDataManager.updateFilters({
+            status: '',
+            role: ''
+        });
+    };
+    
+    return {
+        initializeFilters,
+        resetFilters
+    };
+})();
+
+// =============================================================================
+// USER MODAL MANAGER
+// =============================================================================
+
+/**
+ * Manages user viewing and editing modal
+ */
+const UserModalManager = (() => {
+    let currentUser = null;
+    let editMode = false;
+    
+    const openModal = (userId, mode = 'view') => {
+        if (mode === 'create') {
+            currentUser = null;
+            editMode = true;
+        } else {
+            const user = UsersDataManager.getUsersData().find(u => u.id == userId);
+            if (!user) {
+                UIManager.showError('User not found');
+                return;
+            }
+            
+            currentUser = user;
+            editMode = mode === 'edit';
+        }
+        
+        const modal = document.getElementById('userModal');
+        const modalTitle = document.getElementById('modalTitle');
+        const userDetails = document.getElementById('userDetails');
+        const userForm = document.getElementById('userForm');
+        
+        if (!modal) return;
+        
+        // Set modal title
+        if (mode === 'create') {
+            modalTitle.textContent = 'Create New User';
+        } else {
+            modalTitle.textContent = editMode ? 'Edit User' : 'User Details';
+        }
+        
+        if (editMode) {
+            // Show form, hide details
+            userDetails.style.display = 'none';
+            userForm.style.display = 'block';
+            if (mode === 'create') {
+                populateCreateForm();
+            } else {
+                populateEditForm(currentUser);
+            }
+        } else {
+            // Show details, hide form
+            userDetails.style.display = 'block';
+            userForm.style.display = 'none';
+            populateUserDetails(currentUser);
+        }
+        
+        modal.style.display = 'block';
+    };
+    
+    const populateUserDetails = (user) => {
+        const currentLoggedUser = AuthGuard.getCurrentUser();
+        const canEdit = currentLoggedUser && (currentLoggedUser.role === 'Admin' || currentLoggedUser.id === user.id);
+        
+        const details = document.getElementById('userDetails');
+        
+        details.innerHTML = `
+            <div class="event-detail-grid">
+                <div class="detail-row">
+                    <label>Name:</label>
+                    <span>${user.name}</span>
+                </div>
+                <div class="detail-row">
+                    <label>Email:</label>
+                    <span>${user.email || 'No email'}</span>
+                </div>
+                <div class="detail-row">
+                    <label>Role:</label>
+                    <span>${user.role || 'Calendar User'}</span>
+                </div>
+                <div class="detail-row">
+                    <label>Calendar Color:</label>
+                    <span>
+                        <div class="owner-cell">
+                            <div class="user-color-indicator" style="background-color: ${user.color}"></div>
+                            <span>${user.color}</span>
+                        </div>
+                    </span>
+                </div>
+                <div class="detail-row">
+                    <label>Events Count:</label>
+                    <span>${user.event_count || 0}</span>
+                </div>
+                <div class="detail-row">
+                    <label>Member Since:</label>
+                    <span>${Utils.formatDateShort(user.created_at)}</span>
+                </div>
+                <div class="detail-row">
+                    <label>Last Activity:</label>
+                    <span>${Utils.getTimeAgo(user.last_login)}</span>
+                </div>
+                <div class="detail-row">
+                    <label>Status:</label>
+                    <span>${createStatusBadge(user.status)}</span>
+                </div>
+            </div>
+            <div class="event-actions">
+                ${canEdit ? `
+                    <button class="btn btn-primary" onclick="UserModalManager.switchToEditMode()">✏️ Edit User</button>
+                ` : ''}
+                <button class="btn btn-outline" onclick="UserModalManager.closeModal()">Close</button>
+            </div>
+        `;
+    };
+    
+    const populateCreateForm = () => {
+        document.getElementById('userName').value = '';
+        document.getElementById('userEmail').value = '';
+        document.getElementById('userPassword').value = '';
+        document.getElementById('userRole').value = '';
+        document.getElementById('userColor').value = '#3788d8';
+    };
+    
+    const populateEditForm = (user) => {
+        document.getElementById('userName').value = user.name;
+        document.getElementById('userEmail').value = user.email || '';
+        document.getElementById('userPassword').value = '';
+        document.getElementById('userRole').value = user.role || '';
+        document.getElementById('userColor').value = user.color || '#3788d8';
+    };
+    
+    const createStatusBadge = (status) => {
+        return DataTablesManager.createStatusBadge ? 
+            DataTablesManager.createStatusBadge(status) : 
+            `<span class="status-badge ${status}">${status}</span>`;
+    };
+    
+    const switchToEditMode = () => {
+        if (!currentUser) return;
+        
+        editMode = true;
+        document.getElementById('modalTitle').textContent = 'Edit User';
+        document.getElementById('userDetails').style.display = 'none';
+        document.getElementById('userForm').style.display = 'block';
+        populateEditForm(currentUser);
+    };
+    
+    const closeModal = () => {
+        const modal = document.getElementById('userModal');
+        if (modal) {
+            modal.style.display = 'none';
+        }
+        
+        currentUser = null;
+        editMode = false;
+    };
+    
+    const setupEventListeners = () => {
+        // Modal close events
+        const modal = document.getElementById('userModal');
+        const closeBtn = modal?.querySelector('.close');
+        const cancelBtn = document.getElementById('cancelEditBtn');
+        
+        [closeBtn, cancelBtn].forEach(btn => {
+            btn?.addEventListener('click', closeModal);
+        });
+        
+        // Close on outside click
+        modal?.addEventListener('click', (e) => {
+            if (e.target === modal) closeModal();
+        });
+        
+        // Form submission
+        const editForm = document.getElementById('editUserForm');
+        editForm?.addEventListener('submit', (e) => {
+            e.preventDefault();
+            saveUser();
+        });
+    };
+    
+    const saveUser = async () => {
+        // Implementation will depend on backend API
+        console.log('Save user functionality to be implemented');
+        UIManager.showError('User save functionality not yet implemented');
+    };
+    
+    // Expose methods to global scope for onclick handlers
+    window.UserModalManager = {
+        switchToEditMode,
+        closeModal
+    };
+    
+    return {
+        openModal,
+        closeModal,
+        switchToEditMode,
+        setupEventListeners
     };
 })();
 
@@ -872,9 +1223,31 @@ const UsersApp = (() => {
             }
         });
         
+        // Add user button
+        const addUserBtn = document.getElementById('addUserBtn');
+        addUserBtn?.addEventListener('click', () => {
+            UserModalManager.openModal(null, 'create');
+        });
+        
+        // Table row action handlers
+        $(document).on('click', '.view-user-btn', function() {
+            const userId = $(this).data('user-id');
+            UserModalManager.openModal(userId, 'view');
+        });
+        
+        $(document).on('click', '.edit-user-btn', function() {
+            const userId = $(this).data('user-id');
+            UserModalManager.openModal(userId, 'edit');
+        });
+        
         // Event listeners
         EventBus.on('users:loaded', ({ users }) => {
             console.log('Event: users:loaded', users);
+            DataTablesManager.loadData(UsersDataManager.getFilteredUsers());
+        });
+        
+        EventBus.on('users:filtered', ({ users }) => {
+            console.log('Event: users:filtered', users);
             DataTablesManager.loadData(users);
         });
         
@@ -882,7 +1255,7 @@ const UsersApp = (() => {
             try {
                 console.log('Event: users:refresh triggered');
                 const users = await UsersDataManager.refreshData();
-                DataTablesManager.loadData(users);
+                DataTablesManager.loadData(UsersDataManager.getFilteredUsers());
             } catch (error) {
                 console.error('Error refreshing users:', error);
                 UIManager.showError('Failed to refresh user data');
@@ -903,13 +1276,15 @@ const UsersApp = (() => {
         
         // Initialize components
         DataTablesManager.initializeDataTable();
+        FilterManager.initializeFilters();
+        UserModalManager.setupEventListeners();
         setupEventListeners();
         
         // Load initial data with enhanced error handling
         try {
             console.log('Loading initial users data...');
             const users = await UsersDataManager.loadUsersData();
-            DataTablesManager.loadData(users);
+            DataTablesManager.loadData(UsersDataManager.getFilteredUsers());
             console.log('Initial data loaded successfully');
         } catch (error) {
             console.error('Error loading initial data:', error);
