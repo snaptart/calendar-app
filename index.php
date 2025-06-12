@@ -160,7 +160,12 @@ $externalDeps = [
     <?php 
     // Load page-specific scripts
     foreach ($config['scripts'] as $script) {
-        echo "<script src=\"frontend/js/{$script}\"></script>\n    ";
+        // Load script.js as a module for ES6 imports
+        if ($script === 'script.js') {
+            echo "<script type=\"module\" src=\"frontend/js/{$script}\"></script>\n    ";
+        } else {
+            echo "<script src=\"frontend/js/{$script}\"></script>\n    ";
+        }
     }
     ?>
 </body>
