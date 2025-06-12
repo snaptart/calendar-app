@@ -36,6 +36,21 @@ export const APIClient = (() => {
     };
     
     return {
+        // Generic request method
+        makeRequest(params) {
+            if (typeof params === 'string') {
+                // If params is a string, treat it as URL
+                return makeRequest(params);
+            } else if (params.action) {
+                // If params has action, build URL
+                const url = `${Config.apiEndpoints.api}?action=${params.action}`;
+                return makeRequest(url);
+            } else {
+                // Otherwise, treat as full request config
+                return makeRequest(Config.apiEndpoints.api, params);
+            }
+        },
+        
         // Authentication operations
         checkAuth() {
             return makeRequest(`${Config.apiEndpoints.api}?action=check_auth`);
@@ -46,10 +61,18 @@ export const APIClient = (() => {
             return makeRequest(`${Config.apiEndpoints.api}?action=users`);
         },
         
+        getUsersWithStats() {
+            return makeRequest(`${Config.apiEndpoints.api}?action=users_with_stats`);
+        },
+        
         // Event operations
         getEvents(userIds = []) {
             const userIdsParam = userIds.length ? `&user_ids=${userIds.join(',')}` : '';
             return makeRequest(`${Config.apiEndpoints.api}?action=events${userIdsParam}`);
+        },
+        
+        getEventsForTable() {
+            return makeRequest(`${Config.apiEndpoints.api}?action=events_datatable&length=1000&start=0&draw=1`);
         },
         
         createEvent(eventData) {

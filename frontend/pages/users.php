@@ -1,6 +1,9 @@
 <?php
 // Users page - User management and overview
 // This page is included by index.php, so all variables and authentication are already available
+
+// Include the shared data section header component
+require_once __DIR__ . '/../components/data-section-header.php';
 ?>
 
 <div class="stats-section" style="display: none;">
@@ -24,49 +27,7 @@
     </div>
 </div>
 
-<div class="calendar-events-section">
-    <div class="section-header">
-        <div class="section-info">
-            <h3>User Management</h3>
-            <p class="section-description">View and manage system users with advanced filtering and search</p>
-        </div>
-        <div class="section-controls">
-            <div class="filter-controls">
-                <div class="filter-group">
-                    <label for="userStatusFilter">STATUS:</label>
-                    <select id="userStatusFilter" class="filter-select">
-                        <option value="">All Status</option>
-                        <option value="active">Active</option>
-                        <option value="recent">Recent</option>
-                        <option value="inactive">Inactive</option>
-                        <option value="new">New</option>
-                        <option value="guest">Guest</option>
-                    </select>
-                </div>
-                <div class="filter-group">
-                    <label for="userRoleFilter">ROLE:</label>
-                    <select id="userRoleFilter" class="filter-select">
-                        <option value="">All Roles</option>
-                        <option value="Calendar User">Calendar User</option>
-                        <option value="Admin">Administrator</option>
-                        <option value="Manager">Manager</option>
-                    </select>
-                </div>
-                <div class="action-buttons">
-                    <button id="refreshUsersBtn" class="btn btn-outline">
-                        🔄 Refresh Data
-                    </button>
-                    <button id="addUserBtn" class="btn btn-primary">
-                        + Add User
-                    </button>
-                </div>
-                <div class="connection-status">
-                    <span id="connectionStatus" class="status">Connected</span>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
+<?php renderUsersPageHeader(); ?>
 
 <div class="table-container">
     <table id="usersTable" class="data-table">

@@ -160,8 +160,8 @@ $externalDeps = [
     <?php 
     // Load page-specific scripts
     foreach ($config['scripts'] as $script) {
-        // Load modular scripts as ES6 modules for imports (except simplified events.js)
-        if (in_array($script, ['calendar.js', 'users.js', 'import.js'])) {
+        // Load modular scripts as ES6 modules for imports
+        if (in_array($script, ['calendar.js', 'users.js', 'import.js', 'events.js'])) {
             echo "<script type=\"module\" src=\"frontend/js/{$script}\"></script>\n    ";
         } else {
             echo "<script src=\"frontend/js/{$script}\"></script>\n    ";

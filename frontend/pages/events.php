@@ -1,6 +1,9 @@
 <?php
 // Events page - Table view of all events
 // This page is included by index.php, so all variables and authentication are already available
+
+// Include the shared data section header component
+require_once __DIR__ . '/../components/data-section-header.php';
 ?>
 
 
@@ -25,52 +28,7 @@
     </div>
 </div>
 
-<div class="calendar-events-section">
-    <div class="section-header">
-        <div class="section-info">
-            <h3>Calendar Events</h3>
-            <p class="section-description">View and manage calendar events with advanced filtering and search</p>
-        </div>
-        <div class="section-controls">
-            <div class="filter-controls">
-                <div class="filter-group">
-                    <label for="eventViewFilter">VIEW:</label>
-                    <select id="eventViewFilter" class="filter-select">
-                        <option value="all">All Events</option>
-                        <option value="my">My Events Only</option>
-                        <option value="others">Others' Events</option>
-                    </select>
-                </div>
-                <div class="filter-group">
-                    <label for="eventStatusFilter">STATUS:</label>
-                    <select id="eventStatusFilter" class="filter-select">
-                        <option value="">All Status</option>
-                        <option value="upcoming">Upcoming</option>
-                        <option value="ongoing">Ongoing</option>
-                        <option value="past">Past</option>
-                    </select>
-                </div>
-                <div class="filter-group">
-                    <label for="eventUserFilter">USER:</label>
-                    <select id="eventUserFilter" class="filter-select">
-                        <option value="">All Users</option>
-                    </select>
-                </div>
-                <div class="action-buttons">
-                    <button id="refreshEventsBtn" class="btn btn-outline">
-                        🔄 Refresh Data
-                    </button>
-                    <button id="addEventBtn" class="btn btn-primary">
-                        + Add Event
-                    </button>
-                </div>
-                <div class="connection-status">
-                    <span id="connectionStatus" class="status">Connected</span>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
+<?php renderEventsPageHeader(); ?>
 
 
 <div class="table-container">
