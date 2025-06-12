@@ -48,6 +48,48 @@ export const UIManager = (() => {
         }
     };
     
+    const showLoadingOverlay = () => {
+        let overlay = document.getElementById('loadingOverlay');
+        if (!overlay) {
+            overlay = document.createElement('div');
+            overlay.id = 'loadingOverlay';
+            overlay.innerHTML = '<div class="loading-spinner">Loading...</div>';
+            overlay.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(0,0,0,0.5);
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                z-index: 9999;
+                color: white;
+                font-size: 18px;
+            `;
+            document.body.appendChild(overlay);
+        }
+        overlay.style.display = 'flex';
+    };
+    
+    const hideLoadingOverlay = () => {
+        const overlay = document.getElementById('loadingOverlay');
+        if (overlay) {
+            overlay.style.display = 'none';
+        }
+    };
+    
+    const showError = (message) => {
+        console.error(message);
+        alert(`Error: ${message}`);
+    };
+    
+    const showSuccess = (message) => {
+        console.log(`Success: ${message}`);
+        alert(`Success: ${message}`);
+    };
+    
     const setupAuthenticatedUI = (user) => {
         // Update header to show authenticated user
         const userNameInput = document.getElementById('userName');
@@ -125,6 +167,10 @@ export const UIManager = (() => {
         showDragFeedback,
         hideDragFeedback,
         showNotification,
+        showLoadingOverlay,
+        hideLoadingOverlay,
+        showError,
+        showSuccess,
         setupAuthenticatedUI
     };
 })();

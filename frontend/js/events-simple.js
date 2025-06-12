@@ -118,7 +118,7 @@ const initializeDataTable = () => {
                     return `${hours}h ${minutes}m`;
                 }
             },
-            { data: 'owner', title: 'Owner' },
+            { data: 'owner_name', title: 'Owner' },
             { 
                 data: null, 
                 title: 'Status',

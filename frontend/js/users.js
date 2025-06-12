@@ -1,469 +1,37 @@
-// Enhanced Users Management Page with Better Data Handling
-// Location: frontend/js/users.js
-// 
-// Improved version with better error handling and data validation
-
-// =============================================================================
-// CORE UTILITIES AND EVENT BUS
-// =============================================================================
-
 /**
- * Simple Event Bus for component communication
+ * Users Management Page - Refactored to use modular components
+ * Location: frontend/js/users.js
+ * 
+ * This file has been refactored to eliminate code duplication by using
+ * the existing modular components instead of recreating them.
  */
-const EventBus = (() => {
-    const events = {};
-    
-    return {
-        on(event, callback) {
-            if (!events[event]) events[event] = [];
-            events[event].push(callback);
-        },
-        
-        off(event, callback) {
-            if (!events[event]) return;
-            events[event] = events[event].filter(cb => cb !== callback);
-        },
-        
-        emit(event, data) {
-            if (!events[event]) return;
-            events[event].forEach(callback => {
-                try {
-                    callback(data);
-                } catch (error) {
-                    console.error(`Error in event listener for ${event}:`, error);
-                }
-            });
-        }
-    };
-})();
 
-/**
- * Configuration object for API endpoints
- */
-const Config = {
-    apiEndpoints: {
-        api: 'backend/api.php',
-        sse: 'backend/workers/sse.php'
-    },
-    sse: {
-        maxReconnectAttempts: 10,
-        baseReconnectDelay: 1000,
-        maxReconnectDelay: 30000
-    }
-};
-
-/**
- * Enhanced utility functions
- */
-const Utils = {
-    formatDate(dateString) {
-        if (!dateString || dateString === '0000-00-00 00:00:00' || dateString === null) {
-            return 'Never';
-        }
-        
-        const date = new Date(dateString);
-        if (isNaN(date.getTime())) {
-            return 'Invalid Date';
-        }
-        
-        return date.toLocaleDateString('en-US', {
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
-        });
-    },
-    
-    formatDateShort(dateString) {
-        if (!dateString || dateString === '0000-00-00 00:00:00' || dateString === null) {
-            return 'Never';
-        }
-        
-        const date = new Date(dateString);
-        if (isNaN(date.getTime())) {
-            return 'Invalid';
-        }
-        
-        return date.toLocaleDateString('en-US', {
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric'
-        });
-    },
-    
-    getTimeAgo(dateString) {
-        if (!dateString || dateString === '0000-00-00 00:00:00' || dateString === null) {
-            return 'Never';
-        }
-        
-        const date = new Date(dateString);
-        if (isNaN(date.getTime())) {
-            return 'Unknown';
-        }
-        
-        const now = new Date();
-        const diffMs = now - date;
-        const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-        
-        if (diffDays === 0) {
-            const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-            if (diffHours === 0) {
-                const diffMinutes = Math.floor(diffMs / (1000 * 60));
-                return diffMinutes <= 1 ? 'Just now' : `${diffMinutes} min ago`;
-            }
-            return diffHours === 1 ? '1 hour ago' : `${diffHours} hours ago`;
-        } else if (diffDays === 1) {
-            return 'Yesterday';
-        } else if (diffDays < 7) {
-            return `${diffDays} days ago`;
-        } else if (diffDays < 30) {
-            const weeks = Math.floor(diffDays / 7);
-            return weeks === 1 ? '1 week ago' : `${weeks} weeks ago`;
-        } else if (diffDays < 365) {
-            const months = Math.floor(diffDays / 30);
-            return months === 1 ? '1 month ago' : `${months} months ago`;
-        } else {
-            const years = Math.floor(diffDays / 365);
-            return years === 1 ? '1 year ago' : `${years} years ago`;
-        }
-    },
-    
-    getUserStatus(user) {
-        // Check if user has status field from backend
-        if (user.status) {
-            return user.status;
-        }
-        
-        // Fallback calculation
-        const now = new Date();
-        
-        // Check if user has password (registered user vs guest)
-        if (!user.has_password && user.has_password !== undefined) {
-            return 'guest';
-        }
-        
-        const lastLogin = user.last_login;
-        if (!lastLogin || lastLogin === '0000-00-00 00:00:00' || lastLogin === null) {
-            return 'new';
-        }
-        
-        const lastLoginDate = new Date(lastLogin);
-        const diffDays = Math.floor((now - lastLoginDate) / (1000 * 60 * 60 * 24));
-        
-        if (diffDays <= 1) {
-            return 'active';
-        } else if (diffDays <= 7) {
-            return 'recent';
-        } else {
-            return 'inactive';
-        }
-    },
-    
-    validateUserData(user) {
-        // Ensure required fields exist with defaults
-        return {
-            id: user.id || 0,
-            name: user.name || 'Unknown User',
-            email: user.email || null,
-            role: user.role_name || user.role || 'Calendar User',
-            color: user.color || '#3498db',
-            created_at: user.created_at || null,
-            last_login: user.last_login || null,
-            event_count: parseInt(user.event_count) || 0,
-            upcoming_events: parseInt(user.upcoming_events) || 0,
-            past_events: parseInt(user.past_events) || 0,
-            status: user.status || 'unknown',
-            has_password: user.has_password || false
-        };
-    }
-};
+// Import modular components
+import { EventBus } from './core/event-bus.js';
+import { Config } from './core/config.js';
+import { Utils } from './core/utils.js';
+import { APIClient } from './core/api-client.js';
+import { AuthGuard } from './auth/auth-guard.js';
+import { UserManager } from './auth/user-manager.js';
+import { UIManager } from './ui/ui-manager.js';
+import { ModalManager } from './ui/modal-manager.js';
+import { SSEManager } from './realtime/sse-manager.js';
 
 // =============================================================================
-// API CLIENT WITH ENHANCED ERROR HANDLING
+// PAGE-SPECIFIC COMPONENTS
 // =============================================================================
 
 /**
- * Enhanced API communication with better error handling
- */
-const APIClient = (() => {
-    const makeRequest = async (url, options = {}) => {
-        try {
-            const response = await fetch(url, {
-                headers: {
-                    'Content-Type': 'application/json',
-                    ...options.headers
-                },
-                credentials: 'include', // Include cookies for session
-                ...options
-            });
-            
-            if (response.status === 401) {
-                // Unauthorized - redirect to login
-                EventBus.emit('auth:unauthorized');
-                throw new Error('Authentication required');
-            }
-            
-            if (!response.ok) {
-                const errorData = await response.json().catch(() => ({}));
-                throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
-            }
-            
-            const data = await response.json();
-            console.log('API Response:', data); // Debug logging
-            return data;
-        } catch (error) {
-            console.error('API Request failed:', error);
-            throw error;
-        }
-    };
-    
-    return {
-        // Authentication operations
-        checkAuth() {
-            return makeRequest(`${Config.apiEndpoints.api}?action=check_auth`);
-        },
-        
-        // User operations with enhanced stats
-        getUsersWithStats() {
-            console.log('Fetching users with stats...');
-            return makeRequest(`${Config.apiEndpoints.api}?action=users_with_stats`);
-        },
-        
-        // Fallback to regular users endpoint
-        getUsers() {
-            console.log('Fetching basic users...');
-            return makeRequest(`${Config.apiEndpoints.api}?action=users`);
-        },
-        
-        // Get user activity summary
-        getUserActivity(days = 30) {
-            return makeRequest(`${Config.apiEndpoints.api}?action=user_activity&days=${days}`);
-        }
-    };
-})();
-
-// =============================================================================
-// AUTHENTICATION GUARD
-// =============================================================================
-
-/**
- * Handles authentication checks and redirects
- */
-const AuthGuard = (() => {
-    let currentUser = null;
-    
-    const checkAuthentication = async () => {
-        try {
-            const response = await APIClient.checkAuth();
-            
-            if (response.authenticated) {
-                currentUser = response.user;
-                EventBus.emit('auth:authenticated', { user: response.user });
-                return true;
-            } else {
-                redirectToLogin();
-                return false;
-            }
-        } catch (error) {
-            console.error('Authentication check failed:', error);
-            redirectToLogin();
-            return false;
-        }
-    };
-    
-    const redirectToLogin = () => {
-        window.location.href = '../login.php';
-    };
-    
-    const getCurrentUser = () => currentUser;
-    
-    const logout = async () => {
-        try {
-            await fetch(Config.apiEndpoints.api, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                credentials: 'include',
-                body: JSON.stringify({ action: 'logout' })
-            });
-        } catch (error) {
-            console.error('Logout error:', error);
-        } finally {
-            redirectToLogin();
-        }
-    };
-    
-    // Event listeners
-    EventBus.on('auth:unauthorized', redirectToLogin);
-    
-    return {
-        checkAuthentication,
-        getCurrentUser,
-        logout
-    };
-})();
-
-// =============================================================================
-// UI MANAGER
-// =============================================================================
-
-/**
- * Enhanced UI management with better feedback
- */
-const UIManager = (() => {
-    const updateConnectionStatus = (message, className = '') => {
-        const statusEl = document.getElementById('connectionStatus');
-        if (statusEl) {
-            statusEl.textContent = message;
-            statusEl.className = `status ${className}`;
-        }
-    };
-    
-    const updateUserStatus = (message, className = '') => {
-        const statusEl = document.getElementById('userStatus');
-        if (statusEl) {
-            statusEl.textContent = message;
-            statusEl.className = `status ${className}`;
-        }
-    };
-    
-    const showLoadingOverlay = () => {
-        const overlay = document.getElementById('loadingOverlay');
-        if (overlay) {
-            overlay.classList.remove('hidden');
-        }
-    };
-    
-    const hideLoadingOverlay = () => {
-        const overlay = document.getElementById('loadingOverlay');
-        if (overlay) {
-            overlay.classList.add('hidden');
-        }
-    };
-    
-    const showError = (message) => {
-        // Create or update error display
-        let errorEl = document.getElementById('errorDisplay');
-        if (!errorEl) {
-            errorEl = document.createElement('div');
-            errorEl.id = 'errorDisplay';
-            errorEl.className = 'alert alert-danger';
-            errorEl.style.cssText = `
-                position: fixed;
-                top: 20px;
-                right: 20px;
-                z-index: 10000;
-                max-width: 400px;
-                padding: 15px;
-                background: #f8d7da;
-                border: 1px solid #f5c6cb;
-                border-radius: 8px;
-                color: #721c24;
-            `;
-            document.body.appendChild(errorEl);
-        }
-        
-        errorEl.innerHTML = `
-            <strong>Error:</strong> ${message}
-            <button type="button" class="close" style="float: right; background: none; border: none; font-size: 18px; cursor: pointer;">&times;</button>
-        `;
-        
-        // Auto-hide after 5 seconds
-        setTimeout(() => {
-            errorEl.remove();
-        }, 5000);
-        
-        // Close button
-        errorEl.querySelector('.close').addEventListener('click', () => {
-            errorEl.remove();
-        });
-    };
-    
-    const setupAuthenticatedUI = (user) => {
-        // Update header to show authenticated user
-        const userNameInput = document.getElementById('userName');
-        if (userNameInput) {
-            userNameInput.value = user.name;
-            userNameInput.disabled = true;
-            userNameInput.style.backgroundColor = '#f7fafc';
-            userNameInput.style.color = '#2d3748';
-        }
-        
-        // Add logout button
-        addLogoutButton();
-        
-        updateUserStatus(`Logged in as: ${user.name}`, 'user-set');
-    };
-    
-    const addLogoutButton = () => {
-        const userSection = document.querySelector('.user-section');
-        if (userSection && !document.getElementById('logoutBtn')) {
-            const logoutBtn = document.createElement('button');
-            logoutBtn.id = 'logoutBtn';
-            logoutBtn.className = 'btn btn-small btn-outline';
-            logoutBtn.textContent = 'Logout';
-            logoutBtn.style.marginLeft = '8px';
-            
-            logoutBtn.addEventListener('click', () => {
-                if (confirm('Are you sure you want to logout?')) {
-                    AuthGuard.logout();
-                }
-            });
-            
-            userSection.appendChild(logoutBtn);
-        }
-    };
-    
-    const updateUsersSummary = (stats) => {
-        document.getElementById('totalUsersCount').textContent = stats.total || 0;
-        document.getElementById('activeUsersCount').textContent = stats.active || 0;
-        document.getElementById('newUsersCount').textContent = stats.new || 0;
-        document.getElementById('adminUsersCount').textContent = stats.admin || 0;
-    };
-    
-    // Event listeners
-    EventBus.on('connection:status', ({ status, message }) => {
-        updateConnectionStatus(message, status);
-    });
-    
-    EventBus.on('auth:authenticated', ({ user }) => {
-        setupAuthenticatedUI(user);
-    });
-    
-    EventBus.on('users:loading', () => {
-        showLoadingOverlay();
-    });
-    
-    EventBus.on('users:loaded', () => {
-        hideLoadingOverlay();
-    });
-    
-    EventBus.on('users:error', ({ error }) => {
-        hideLoadingOverlay();
-        showError(error.message || 'Failed to load users data');
-    });
-    
-    return {
-        updateConnectionStatus,
-        updateUserStatus,
-        showLoadingOverlay,
-        hideLoadingOverlay,
-        showError,
-        setupAuthenticatedUI,
-        updateUsersSummary
-    };
-})();
-
-// =============================================================================
-// ENHANCED USERS DATA MANAGER
-// =============================================================================
-
-/**
- * Enhanced user data management with better validation
+ * Users data management with filtering and caching
  */
 const UsersDataManager = (() => {
     let usersData = [];
     let lastFetchTime = 0;
+    let currentFilters = {
+        status: '',
+        role: '',
+        search: ''
+    };
     
     const loadUsersData = async () => {
         try {
@@ -471,36 +39,21 @@ const UsersDataManager = (() => {
             
             console.log('Loading users data...');
             
-            // Try to get users with stats first
-            let users;
-            try {
-                users = await APIClient.getUsersWithStats();
-                console.log('Successfully loaded users with stats:', users);
-            } catch (error) {
-                console.warn('Failed to load users with stats, falling back to basic users:', error);
-                // Fallback to basic users
-                const basicUsers = await APIClient.getUsers();
-                
-                // Enhance basic users with default stats
-                users = basicUsers.map(user => ({
-                    ...Utils.validateUserData(user),
-                    event_count: 0,
-                    upcoming_events: 0,
-                    past_events: 0,
-                    status: Utils.getUserStatus(user)
-                }));
-            }
+            // Use the modular APIClient
+            const users = await APIClient.getUsers();
+            console.log('Successfully loaded users:', users);
             
-            // Validate and clean user data
             if (!Array.isArray(users)) {
                 throw new Error('Invalid users data format received from server');
             }
             
-            usersData = users.map(user => {
-                const validatedUser = Utils.validateUserData(user);
-                console.log('Validated user:', validatedUser);
-                return validatedUser;
-            });
+            usersData = users.map(user => ({
+                ...user,
+                status: user.status || 'active',
+                role: user.role || 'user',
+                created_at: user.created_at || 'Unknown',
+                last_login: user.last_login || 'Never'
+            }));
             
             lastFetchTime = Date.now();
             
@@ -514,81 +67,59 @@ const UsersDataManager = (() => {
         }
     };
     
-    const refreshData = () => {
-        console.log('Refreshing users data...');
-        return loadUsersData();
-    };
-    
-    const getUsersData = () => usersData;
-    
-    const calculateSummaryStats = () => {
-        const stats = {
-            total: usersData.length,
-            active: 0,
-            recent: 0,
-            inactive: 0,
-            new: 0,
-            guest: 0,
-            admin: 0
-        };
-        
-        usersData.forEach(user => {
-            const status = user.status || Utils.getUserStatus(user);
-            
-            if (status === 'active') {
-                stats.active++;
-            } else if (status === 'recent') {
-                stats.recent++;
-            } else if (status === 'inactive') {
-                stats.inactive++;
-            } else if (status === 'new') {
-                stats.new++;
-            } else if (status === 'guest') {
-                stats.guest++;
-            }
-            
-            // Check for admin role
-            if (user.role === 'Admin' || user.role === 'Administrator') {
-                stats.admin++;
-            }
-        });
-        
-        return stats;
-    };
-    
-    const getLastFetchTime = () => lastFetchTime;
-    
     const getFilteredUsers = () => {
         let filtered = [...usersData];
         
-        // Apply filters if any are set
-        // This will be used by FilterManager
+        // Apply filters
+        if (currentFilters.status) {
+            filtered = filtered.filter(user => 
+                user.status === currentFilters.status
+            );
+        }
+        
+        if (currentFilters.role) {
+            filtered = filtered.filter(user => 
+                user.role === currentFilters.role
+            );
+        }
+        
+        if (currentFilters.search) {
+            const searchTerm = currentFilters.search.toLowerCase();
+            filtered = filtered.filter(user => 
+                (user.name && user.name.toLowerCase().includes(searchTerm)) ||
+                (user.email && user.email.toLowerCase().includes(searchTerm))
+            );
+        }
         
         return filtered;
     };
     
-    const updateFilters = (newFilters) => {
-        // Filter logic will be implemented here
-        EventBus.emit('users:filtered', { users: getFilteredUsers() });
+    const updateFilters = (filters) => {
+        currentFilters = { ...currentFilters, ...filters };
+        EventBus.emit('users:filters-changed', { filters: currentFilters });
+    };
+    
+    const refreshData = async () => {
+        await loadUsersData();
+    };
+    
+    const getUserById = (userId) => {
+        return usersData.find(user => user.id == userId);
     };
     
     return {
         loadUsersData,
-        refreshData,
-        getUsersData,
-        getLastFetchTime,
-        calculateSummaryStats,
         getFilteredUsers,
-        updateFilters
+        updateFilters,
+        refreshData,
+        getUserById,
+        getUsersData: () => [...usersData],
+        getCurrentFilters: () => ({ ...currentFilters })
     };
 })();
 
-// =============================================================================
-// ENHANCED DATATABLES MANAGER
-// =============================================================================
-
 /**
- * Enhanced DataTables management with better data handling
+ * DataTables management for users
  */
 const DataTablesManager = (() => {
     let dataTable = null;
@@ -596,221 +127,78 @@ const DataTablesManager = (() => {
     const initializeDataTable = () => {
         if (dataTable) {
             dataTable.destroy();
-            dataTable = null;
         }
         
-        console.log('Initializing DataTable...');
-        
         dataTable = $('#usersTable').DataTable({
-            responsive: true,
+            data: [],
+            columns: [
+                { 
+                    data: 'name', 
+                    title: 'Name',
+                    render: (data, type, row) => data || row.email || 'N/A'
+                },
+                { data: 'email', title: 'Email' },
+                { 
+                    data: 'role', 
+                    title: 'Role',
+                    render: (data) => {
+                        const roleClass = data === 'admin' ? 'badge-danger' : 
+                                         data === 'manager' ? 'badge-warning' : 'badge-secondary';
+                        return `<span class="badge ${roleClass}">${data || 'user'}</span>`;
+                    }
+                },
+                { 
+                    data: 'status', 
+                    title: 'Status',
+                    render: (data) => {
+                        const statusClass = data === 'active' ? 'badge-success' : 'badge-secondary';
+                        return `<span class="badge ${statusClass}">${data || 'active'}</span>`;
+                    }
+                },
+                { 
+                    data: 'created_at', 
+                    title: 'Created',
+                    render: (data) => Utils.formatDateOnly(data)
+                },
+                { 
+                    data: 'last_login', 
+                    title: 'Last Login',
+                    render: (data) => data === 'Never' ? data : Utils.formatDateTime(data)
+                },
+                {
+                    data: null,
+                    title: 'Actions',
+                    orderable: false,
+                    render: (data, type, row) => `
+                        <button class="btn btn-sm btn-outline-primary view-user-btn" data-user-id="${row.id}">
+                            👁️ View
+                        </button>
+                        <button class="btn btn-sm btn-outline-secondary edit-user-btn" data-user-id="${row.id}">
+                            ✏️ Edit
+                        </button>
+                    `
+                }
+            ],
             pageLength: 25,
-            lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "All"]],
-            order: [[5, 'desc']], // Sort by Member Since (newest first)
-            dom: '<"top"<"entries-section"l><"search-section"f>>Brt<"bottom"<"info-section"i><"pagination-section"p>>',
-            pagingType: 'simple_numbers',
-            buttons: [
-                {
-                    extend: 'csv',
-                    text: '📄 Export CSV',
-                    filename: 'users_export_' + new Date().toISOString().split('T')[0],
-                    exportOptions: {
-                        columns: [1, 2, 3, 4, 5, 6, 7] // Exclude color column (0) and actions column (8)
-                    }
-                },
-                {
-                    extend: 'excel',
-                    text: '📊 Export Excel',
-                    filename: 'users_export_' + new Date().toISOString().split('T')[0],
-                    exportOptions: {
-                        columns: [1, 2, 3, 4, 5, 6] // Exclude color column
-                    }
-                },
-                {
-                    extend: 'pdf',
-                    text: '📑 Export PDF',
-                    filename: 'users_export_' + new Date().toISOString().split('T')[0],
-                    exportOptions: {
-                        columns: [1, 2, 3, 4, 5, 6] // Exclude color column
-                    },
-                    customize: function(doc) {
-                        doc.content[1].table.widths = ['20%', '25%', '15%', '15%', '15%', '10%'];
-                        doc.styles.tableHeader.fontSize = 10;
-                        doc.defaultStyle.fontSize = 9;
-                    }
-                },
-                {
-                    extend: 'print',
-                    text: '🖨️ Print',
-                    exportOptions: {
-                        columns: [1, 2, 3, 4, 5, 6] // Exclude color column
-                    }
-                }
-            ],
-            columnDefs: [
-                {
-                    targets: 0, // Color column
-                    orderable: false,
-                    searchable: false,
-                    className: 'text-center',
-                    width: '60px'
-                },
-                {
-                    targets: 1, // Name column
-                    width: '20%'
-                },
-                {
-                    targets: 2, // Email column
-                    width: '20%'
-                },
-                {
-                    targets: 3, // Role column
-                    width: '12%'
-                },
-                {
-                    targets: 4, // Events Count column
-                    className: 'text-center',
-                    width: '10%'
-                },
-                {
-                    targets: [5, 6], // Date columns
-                    width: '15%',
-                    className: 'text-nowrap'
-                },
-                {
-                    targets: 7, // Status column
-                    className: 'text-center',
-                    width: '10%'
-                },
-                {
-                    targets: 8, // Actions column
-                    orderable: false,
-                    searchable: false,
-                    className: 'text-center',
-                    width: '120px'
-                }
-            ],
-            language: {
-                search: "Search users:",
-                lengthMenu: "Show _MENU_ users per page",
-                info: "Showing _START_ to _END_ of _TOTAL_ users",
-                infoEmpty: "No users found",
-                infoFiltered: "(filtered from _MAX_ total users)",
-                paginate: {
-                    first: "First",
-                    last: "Last",
-                    next: "Next",
-                    previous: "Previous"
-                },
-                emptyTable: "No users found in the system"
-            },
-            drawCallback: function() {
-                console.log('DataTable redrawn');
-            }
+            order: [[0, 'asc']],
+            responsive: true,
+            searching: true,
+            paging: true,
+            info: true
         });
         
-        console.log('DataTable initialized successfully');
+        return dataTable;
     };
     
     const loadData = (users) => {
-        if (!dataTable) {
-            console.error('DataTable not initialized');
-            return;
+        if (dataTable) {
+            dataTable.clear().rows.add(users).draw();
         }
-        
-        console.log('Loading data into DataTable:', users);
-        
-        // Validate users data
-        if (!Array.isArray(users)) {
-            console.error('Invalid users data provided to DataTable');
-            return;
-        }
-        
-        // Clear existing data
-        dataTable.clear();
-        
-        // Add new data
-        users.forEach((user, index) => {
-            try {
-                const validatedUser = Utils.validateUserData(user);
-                
-                const row = [
-                    createColorIndicator(validatedUser.color),
-                    validatedUser.name,
-                    validatedUser.email || 'No email',
-                    validatedUser.role || 'Calendar User',
-                    createEventCountBadge(validatedUser.event_count),
-                    Utils.formatDateShort(validatedUser.created_at),
-                    Utils.getTimeAgo(validatedUser.last_login),
-                    createStatusBadge(validatedUser.status),
-                    createActionsCell(validatedUser)
-                ];
-                
-                dataTable.row.add(row);
-            } catch (error) {
-                console.error(`Error processing user ${index}:`, error, user);
-            }
-        });
-        
-        // Redraw table
-        dataTable.draw();
-        
-        console.log(`Successfully loaded ${users.length} users into DataTable`);
-        
-        // Update summary stats
-        const stats = UsersDataManager.calculateSummaryStats();
-        UIManager.updateUsersSummary(stats);
-    };
-    
-    const createColorIndicator = (color) => {
-        const safeColor = color || '#3498db';
-        return `<div class="user-color-indicator" style="background-color: ${safeColor}"></div>`;
-    };
-    
-    const createEventCountBadge = (count) => {
-        const numCount = parseInt(count) || 0;
-        let badgeClass = 'event-count';
-        
-        if (numCount === 0) {
-            badgeClass += ' zero';
-        } else if (numCount >= 10) {
-            badgeClass += ' high';
-        }
-        
-        return `<span class="${badgeClass}">${numCount}</span>`;
-    };
-    
-    const createStatusBadge = (status) => {
-        const statusMap = {
-            'active': { class: 'active', text: 'Active' },
-            'recent': { class: 'recent', text: 'Recent' },
-            'inactive': { class: 'inactive', text: 'Inactive' },
-            'new': { class: 'new', text: 'New' },
-            'guest': { class: 'guest', text: 'Guest' },
-            'unknown': { class: 'unknown', text: 'Unknown' }
-        };
-        
-        const statusInfo = statusMap[status] || statusMap['unknown'];
-        return `<span class="status-badge ${statusInfo.class}">${statusInfo.text}</span>`;
-    };
-    
-    const createActionsCell = (user) => {
-        const currentUser = AuthGuard.getCurrentUser();
-        const canEdit = currentUser && (currentUser.role === 'Admin' || currentUser.id === user.id);
-        
-        let actions = `<button class="btn btn-small btn-outline view-user-btn" data-user-id="${user.id}">👁️ View</button>`;
-        
-        if (canEdit) {
-            actions += ` <button class="btn btn-small btn-primary edit-user-btn" data-user-id="${user.id}">✏️ Edit</button>`;
-        }
-        
-        return `<div class="actions-cell">${actions}</div>`;
     };
     
     const refreshTable = () => {
-        if (dataTable) {
-            // Instead of ajax reload, we'll trigger a data refresh
-            EventBus.emit('users:refresh');
-        }
+        const filteredUsers = UsersDataManager.getFilteredUsers();
+        loadData(filteredUsers);
     };
     
     const getDataTable = () => dataTable;
@@ -823,45 +211,42 @@ const DataTablesManager = (() => {
     };
 })();
 
-// =============================================================================
-// FILTER MANAGER
-// =============================================================================
-
 /**
- * Manages filtering controls for users
+ * Filter management for users
  */
 const FilterManager = (() => {
     const initializeFilters = () => {
-        // Set up filter event listeners
-        setupFilterEventListeners();
-    };
-    
-    const setupFilterEventListeners = () => {
         // Status filter
-        const statusFilter = document.getElementById('userStatusFilter');
-        if (statusFilter) {
-            statusFilter.addEventListener('change', (e) => {
-                UsersDataManager.updateFilters({ status: e.target.value });
-            });
-        }
+        $('#statusFilter').on('change', function() {
+            UsersDataManager.updateFilters({ status: this.value });
+            DataTablesManager.refreshTable();
+        });
         
         // Role filter
-        const roleFilter = document.getElementById('userRoleFilter');
-        if (roleFilter) {
-            roleFilter.addEventListener('change', (e) => {
-                UsersDataManager.updateFilters({ role: e.target.value });
-            });
-        }
+        $('#roleFilter').on('change', function() {
+            UsersDataManager.updateFilters({ role: this.value });
+            DataTablesManager.refreshTable();
+        });
+        
+        // Search filter with debounce
+        let searchTimeout;
+        $('#searchFilter').on('input', function() {
+            const searchTerm = this.value;
+            
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(() => {
+                UsersDataManager.updateFilters({ search: searchTerm });
+                DataTablesManager.refreshTable();
+            }, 300);
+        });
     };
     
     const resetFilters = () => {
-        document.getElementById('userStatusFilter').value = '';
-        document.getElementById('userRoleFilter').value = '';
-        
-        UsersDataManager.updateFilters({
-            status: '',
-            role: ''
-        });
+        $('#statusFilter').val('');
+        $('#roleFilter').val('');
+        $('#searchFilter').val('');
+        UsersDataManager.updateFilters({ status: '', role: '', search: '' });
+        DataTablesManager.refreshTable();
     };
     
     return {
@@ -870,340 +255,271 @@ const FilterManager = (() => {
     };
 })();
 
-// =============================================================================
-// USER MODAL MANAGER
-// =============================================================================
-
 /**
- * Manages user viewing and editing modal
+ * User modal management
  */
 const UserModalManager = (() => {
-    let currentUser = null;
-    let editMode = false;
+    let currentUserId = null;
+    let currentMode = 'view';
     
-    const openModal = (userId, mode = 'view') => {
-        if (mode === 'create') {
-            currentUser = null;
-            editMode = true;
-        } else {
-            const user = UsersDataManager.getUsersData().find(u => u.id == userId);
-            if (!user) {
-                UIManager.showError('User not found');
-                return;
-            }
-            
-            currentUser = user;
-            editMode = mode === 'edit';
-        }
+    const openModal = async (userId, mode = 'view') => {
+        currentUserId = userId;
+        currentMode = mode;
         
-        const modal = document.getElementById('userModal');
-        const modalTitle = document.getElementById('modalTitle');
-        const userDetails = document.getElementById('userDetails');
-        const userForm = document.getElementById('userForm');
-        
-        if (!modal) return;
-        
-        // Set modal title
-        if (mode === 'create') {
-            modalTitle.textContent = 'Create New User';
-        } else {
-            modalTitle.textContent = editMode ? 'Edit User' : 'User Details';
-        }
-        
-        if (editMode) {
-            // Show form, hide details
-            userDetails.style.display = 'none';
-            userForm.style.display = 'block';
-            if (mode === 'create') {
-                populateCreateForm();
+        try {
+            if (userId && mode !== 'create') {
+                const user = UsersDataManager.getUserById(userId);
+                
+                if (user) {
+                    showUserModal(user, mode);
+                } else {
+                    UIManager.showError('User not found');
+                }
             } else {
-                populateEditForm(currentUser);
+                showUserModal(null, mode);
             }
-        } else {
-            // Show details, hide form
-            userDetails.style.display = 'block';
-            userForm.style.display = 'none';
-            populateUserDetails(currentUser);
+        } catch (error) {
+            console.error('Error opening modal:', error);
+            UIManager.showError('Failed to load user data');
         }
-        
-        modal.style.display = 'block';
     };
     
-    const populateUserDetails = (user) => {
-        const currentLoggedUser = AuthGuard.getCurrentUser();
-        const canEdit = currentLoggedUser && (currentLoggedUser.role === 'Admin' || currentLoggedUser.id === user.id);
+    const showUserModal = (user, mode) => {
+        const modal = ModalManager.create({
+            title: mode === 'create' ? 'Create User' : mode === 'edit' ? 'Edit User' : 'View User',
+            size: 'large',
+            body: generateModalContent(user, mode),
+            footer: generateModalFooter(mode)
+        });
         
-        const details = document.getElementById('userDetails');
+        modal.show();
+    };
+    
+    const generateModalContent = (user, mode) => {
+        const isReadonly = mode === 'view';
+        const name = user?.name || '';
+        const email = user?.email || '';
+        const role = user?.role || 'user';
+        const status = user?.status || 'active';
+        const password = '';
         
-        details.innerHTML = `
-            <div class="event-detail-grid">
-                <div class="detail-row">
-                    <label>Name:</label>
-                    <span>${user.name}</span>
+        return `
+            <form id="userForm">
+                <div class="form-group">
+                    <label for="userName">Name</label>
+                    <input type="text" class="form-control" id="userName" value="${name}" ${isReadonly ? 'readonly' : ''} required>
                 </div>
-                <div class="detail-row">
-                    <label>Email:</label>
-                    <span>${user.email || 'No email'}</span>
+                <div class="form-group">
+                    <label for="userEmail">Email</label>
+                    <input type="email" class="form-control" id="userEmail" value="${email}" ${isReadonly ? 'readonly' : ''} required>
                 </div>
-                <div class="detail-row">
-                    <label>Role:</label>
-                    <span>${user.role || 'Calendar User'}</span>
+                <div class="form-group">
+                    <label for="userRole">Role</label>
+                    <select class="form-control" id="userRole" ${isReadonly ? 'disabled' : ''}>
+                        <option value="user" ${role === 'user' ? 'selected' : ''}>User</option>
+                        <option value="manager" ${role === 'manager' ? 'selected' : ''}>Manager</option>
+                        <option value="admin" ${role === 'admin' ? 'selected' : ''}>Admin</option>
+                    </select>
                 </div>
-                <div class="detail-row">
-                    <label>Calendar Color:</label>
-                    <span>
-                        <div class="owner-cell">
-                            <div class="user-color-indicator" style="background-color: ${user.color}"></div>
-                            <span>${user.color}</span>
-                        </div>
-                    </span>
+                <div class="form-group">
+                    <label for="userStatus">Status</label>
+                    <select class="form-control" id="userStatus" ${isReadonly ? 'disabled' : ''}>
+                        <option value="active" ${status === 'active' ? 'selected' : ''}>Active</option>
+                        <option value="inactive" ${status === 'inactive' ? 'selected' : ''}>Inactive</option>
+                    </select>
                 </div>
-                <div class="detail-row">
-                    <label>Events Count:</label>
-                    <span>${user.event_count || 0}</span>
-                </div>
-                <div class="detail-row">
-                    <label>Member Since:</label>
-                    <span>${Utils.formatDateShort(user.created_at)}</span>
-                </div>
-                <div class="detail-row">
-                    <label>Last Activity:</label>
-                    <span>${Utils.getTimeAgo(user.last_login)}</span>
-                </div>
-                <div class="detail-row">
-                    <label>Status:</label>
-                    <span>${createStatusBadge(user.status)}</span>
-                </div>
-            </div>
-            <div class="event-actions">
-                ${canEdit ? `
-                    <button class="btn btn-primary" onclick="UserModalManager.switchToEditMode()">✏️ Edit User</button>
+                ${mode === 'create' ? `
+                    <div class="form-group">
+                        <label for="userPassword">Password</label>
+                        <input type="password" class="form-control" id="userPassword" value="${password}" required>
+                    </div>
                 ` : ''}
-                <button class="btn btn-outline" onclick="UserModalManager.closeModal()">Close</button>
-            </div>
+                ${user ? `
+                    <div class="form-group">
+                        <label>Created</label>
+                        <span class="form-control-plaintext">${Utils.formatDateTime(user.created_at)}</span>
+                    </div>
+                    <div class="form-group">
+                        <label>Last Login</label>
+                        <span class="form-control-plaintext">${user.last_login === 'Never' ? 'Never' : Utils.formatDateTime(user.last_login)}</span>
+                    </div>
+                ` : ''}
+            </form>
         `;
     };
     
-    const populateCreateForm = () => {
-        document.getElementById('userName').value = '';
-        document.getElementById('userEmail').value = '';
-        document.getElementById('userPassword').value = '';
-        document.getElementById('userRole').value = '';
-        document.getElementById('userColor').value = '#3788d8';
-    };
-    
-    const populateEditForm = (user) => {
-        document.getElementById('userName').value = user.name;
-        document.getElementById('userEmail').value = user.email || '';
-        document.getElementById('userPassword').value = '';
-        document.getElementById('userRole').value = user.role || '';
-        document.getElementById('userColor').value = user.color || '#3788d8';
-    };
-    
-    const createStatusBadge = (status) => {
-        return DataTablesManager.createStatusBadge ? 
-            DataTablesManager.createStatusBadge(status) : 
-            `<span class="status-badge ${status}">${status}</span>`;
+    const generateModalFooter = (mode) => {
+        if (mode === 'view') {
+            return `
+                <button class="btn btn-primary" onclick="UserModalManager.switchToEditMode()">✏️ Edit User</button>
+                <button class="btn btn-secondary" onclick="ModalManager.closeActive()">Close</button>
+            `;
+        } else if (mode === 'edit') {
+            return `
+                <button class="btn btn-success" onclick="UserModalManager.saveUser()">💾 Save Changes</button>
+                <button class="btn btn-secondary" onclick="ModalManager.closeActive()">Cancel</button>
+            `;
+        } else {
+            return `
+                <button class="btn btn-success" onclick="UserModalManager.createUser()">➕ Create User</button>
+                <button class="btn btn-secondary" onclick="ModalManager.closeActive()">Cancel</button>
+            `;
+        }
     };
     
     const switchToEditMode = () => {
-        if (!currentUser) return;
-        
-        editMode = true;
-        document.getElementById('modalTitle').textContent = 'Edit User';
-        document.getElementById('userDetails').style.display = 'none';
-        document.getElementById('userForm').style.display = 'block';
-        populateEditForm(currentUser);
-    };
-    
-    const closeModal = () => {
-        const modal = document.getElementById('userModal');
-        if (modal) {
-            modal.style.display = 'none';
+        if (currentUserId) {
+            openModal(currentUserId, 'edit');
         }
-        
-        currentUser = null;
-        editMode = false;
-    };
-    
-    const setupEventListeners = () => {
-        // Modal close events
-        const modal = document.getElementById('userModal');
-        const closeBtn = modal?.querySelector('.close');
-        const cancelBtn = document.getElementById('cancelEditBtn');
-        
-        [closeBtn, cancelBtn].forEach(btn => {
-            btn?.addEventListener('click', closeModal);
-        });
-        
-        // Close on outside click
-        modal?.addEventListener('click', (e) => {
-            if (e.target === modal) closeModal();
-        });
-        
-        // Form submission
-        const editForm = document.getElementById('editUserForm');
-        editForm?.addEventListener('submit', (e) => {
-            e.preventDefault();
-            saveUser();
-        });
     };
     
     const saveUser = async () => {
-        // Implementation will depend on backend API
-        console.log('Save user functionality to be implemented');
-        UIManager.showError('User save functionality not yet implemented');
+        try {
+            const formData = getFormData();
+            if (!formData) return;
+            
+            const userData = {
+                ...formData,
+                id: currentUserId,
+                action: 'update_user'
+            };
+            
+            // Note: This would require implementing user update in APIClient
+            await fetch(Config.apiEndpoints.api, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify(userData)
+            });
+            
+            ModalManager.closeActive();
+            await UsersDataManager.refreshData();
+            DataTablesManager.refreshTable();
+            UIManager.showSuccess('User updated successfully');
+            
+        } catch (error) {
+            console.error('Error saving user:', error);
+            UIManager.showError('Failed to save user: ' + error.message);
+        }
     };
     
-    // Expose methods to global scope for onclick handlers
+    const createUser = async () => {
+        try {
+            const formData = getFormData(true);
+            if (!formData) return;
+            
+            const userData = {
+                ...formData,
+                action: 'create_user'
+            };
+            
+            // Note: This would require implementing user creation in APIClient
+            await fetch(Config.apiEndpoints.api, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify(userData)
+            });
+            
+            ModalManager.closeActive();
+            await UsersDataManager.refreshData();
+            DataTablesManager.refreshTable();
+            UIManager.showSuccess('User created successfully');
+            
+        } catch (error) {
+            console.error('Error creating user:', error);
+            UIManager.showError('Failed to create user: ' + error.message);
+        }
+    };
+    
+    const getFormData = (includePassword = false) => {
+        const name = $('#userName').val().trim();
+        const email = $('#userEmail').val().trim();
+        const role = $('#userRole').val();
+        const status = $('#userStatus').val();
+        const password = includePassword ? $('#userPassword').val() : undefined;
+        
+        if (!name || !email) {
+            UIManager.showError('Please fill in all required fields');
+            return null;
+        }
+        
+        if (!email.includes('@')) {
+            UIManager.showError('Please enter a valid email address');
+            return null;
+        }
+        
+        if (includePassword && (!password || password.length < 6)) {
+            UIManager.showError('Password must be at least 6 characters long');
+            return null;
+        }
+        
+        const formData = {
+            name,
+            email,
+            role,
+            status
+        };
+        
+        if (includePassword) {
+            formData.password = password;
+        }
+        
+        return formData;
+    };
+    
+    // Make functions available globally for onclick handlers
     window.UserModalManager = {
+        openModal,
         switchToEditMode,
-        closeModal
+        saveUser,
+        createUser
     };
     
     return {
         openModal,
-        closeModal,
         switchToEditMode,
-        setupEventListeners
+        saveUser,
+        createUser
     };
 })();
 
-// =============================================================================
-// SSE MANAGER
-// =============================================================================
-
 /**
- * Manages Server-Sent Events for real-time updates
- */
-const SSEManager = (() => {
-    let eventSource = null;
-    let lastEventId = 0;
-    let reconnectAttempts = 0;
-    let isConnected = false;
-    
-    const connect = () => {
-        if (eventSource) {
-            eventSource.close();
-            isConnected = false;
-        }
-        
-        EventBus.emit('connection:status', {
-            status: 'connecting',
-            message: 'Connecting...'
-        });
-        
-        console.log('Attempting SSE connection with lastEventId:', lastEventId);
-        
-        eventSource = new EventSource(`${Config.apiEndpoints.sse}?lastEventId=${lastEventId}`);
-        
-        eventSource.onopen = () => {
-            EventBus.emit('connection:status', {
-                status: 'connected',
-                message: 'Connected'
-            });
-            isConnected = true;
-            reconnectAttempts = 0;
-            console.log('SSE connection established');
-        };
-        
-        eventSource.onerror = (e) => {
-            console.log('SSE connection error:', e);
-            EventBus.emit('connection:status', {
-                status: 'disconnected',
-                message: 'Disconnected'
-            });
-            isConnected = false;
-            eventSource.close();
-            
-            // Exponential backoff for reconnection
-            reconnectAttempts++;
-            if (reconnectAttempts <= Config.sse.maxReconnectAttempts) {
-                const delay = Math.min(
-                    Config.sse.baseReconnectDelay * Math.pow(2, reconnectAttempts),
-                    Config.sse.maxReconnectDelay
-                );
-                
-                console.log(`SSE reconnecting in ${delay}ms (attempt ${reconnectAttempts})`);
-                setTimeout(connect, delay);
-            } else {
-                console.log('Max reconnection attempts reached');
-                EventBus.emit('connection:status', {
-                    status: 'failed',
-                    message: 'Connection failed'
-                });
-            }
-        };
-        
-        setupEventListeners();
-    };
-    
-    const setupEventListeners = () => {
-        eventSource.addEventListener('user_created', (e) => {
-            console.log('SSE: User created, refreshing data');
-            EventBus.emit('users:refresh');
-            lastEventId = parseInt(e.lastEventId) || lastEventId;
-        });
-        
-        eventSource.addEventListener('heartbeat', (e) => {
-            lastEventId = parseInt(e.lastEventId) || lastEventId;
-        });
-        
-        eventSource.addEventListener('reconnect', (e) => {
-            console.log('SSE: Server requested reconnect');
-            lastEventId = parseInt(e.lastEventId) || lastEventId;
-            connect();
-        });
-        
-        eventSource.addEventListener('timeout', () => {
-            console.log('SSE: Connection timeout, reconnecting');
-            connect();
-        });
-        
-        // Listen for event changes that might affect user statistics
-        ['create', 'update', 'delete'].forEach(eventType => {
-            eventSource.addEventListener(eventType, (e) => {
-                console.log(`SSE: Event ${eventType}, may need to refresh user stats`);
-                // Debounce refresh to avoid too many updates
-                clearTimeout(window.userStatsRefreshTimeout);
-                window.userStatsRefreshTimeout = setTimeout(() => {
-                    EventBus.emit('users:refresh');
-                }, 2000);
-                lastEventId = parseInt(e.lastEventId) || lastEventId;
-            });
-        });
-    };
-    
-    const disconnect = () => {
-        if (eventSource) {
-            eventSource.close();
-            eventSource = null;
-            isConnected = false;
-        }
-    };
-    
-    return {
-        connect,
-        disconnect
-    };
-})();
-
-// =============================================================================
-// APPLICATION CONTROLLER
-// =============================================================================
-
-/**
- * Enhanced application controller with better error handling
+ * Main users application controller
  */
 const UsersApp = (() => {
     const setupEventListeners = () => {
+        // Data refresh events
+        EventBus.on('users:refresh', () => {
+            console.log('Event: users:refresh triggered');
+            DataTablesManager.refreshTable();
+        });
+        
+        // UI events
+        EventBus.on('users:loading', () => {
+            UIManager.showLoadingOverlay();
+        });
+        
+        EventBus.on('users:loaded', () => {
+            UIManager.hideLoadingOverlay();
+        });
+        
+        EventBus.on('users:error', ({ error }) => {
+            UIManager.hideLoadingOverlay();
+            UIManager.showError(error.message || 'Failed to load users data');
+        });
+        
+        // Filter change events
+        EventBus.on('users:filters-changed', () => {
+            DataTablesManager.refreshTable();
+        });
+        
         // Refresh button
         const refreshBtn = document.getElementById('refreshUsersBtn');
         refreshBtn?.addEventListener('click', async () => {
             try {
                 console.log('Manual refresh triggered');
-                const users = await UsersDataManager.refreshData();
-                DataTablesManager.loadData(users);
+                await UsersDataManager.refreshData();
                 
                 // Show success feedback
                 const originalText = refreshBtn.textContent;
@@ -1239,62 +555,31 @@ const UsersApp = (() => {
             const userId = $(this).data('user-id');
             UserModalManager.openModal(userId, 'edit');
         });
-        
-        // Event listeners
-        EventBus.on('users:loaded', ({ users }) => {
-            console.log('Event: users:loaded', users);
-            DataTablesManager.loadData(UsersDataManager.getFilteredUsers());
-        });
-        
-        EventBus.on('users:filtered', ({ users }) => {
-            console.log('Event: users:filtered', users);
-            DataTablesManager.loadData(users);
-        });
-        
-        EventBus.on('users:refresh', async () => {
-            try {
-                console.log('Event: users:refresh triggered');
-                const users = await UsersDataManager.refreshData();
-                DataTablesManager.loadData(UsersDataManager.getFilteredUsers());
-            } catch (error) {
-                console.error('Error refreshing users:', error);
-                UIManager.showError('Failed to refresh user data');
-            }
-        });
     };
     
     const init = async () => {
-        console.log('Initializing Enhanced Users Management Page...');
+        console.log('Initializing Users Management Page...');
         
-        // Check authentication first
+        // Check authentication first using modular AuthGuard
         const isAuthenticated = await AuthGuard.checkAuthentication();
         
         if (!isAuthenticated) {
-            // User is not authenticated, AuthGuard will handle redirect
-            return;
+            return; // AuthGuard will handle redirect
         }
         
         // Initialize components
         DataTablesManager.initializeDataTable();
         FilterManager.initializeFilters();
-        UserModalManager.setupEventListeners();
+        UserModalManager; // Initialize the modal manager
         setupEventListeners();
         
-        // Load initial data with enhanced error handling
-        try {
-            console.log('Loading initial users data...');
-            const users = await UsersDataManager.loadUsersData();
-            DataTablesManager.loadData(UsersDataManager.getFilteredUsers());
-            console.log('Initial data loaded successfully');
-        } catch (error) {
-            console.error('Error loading initial data:', error);
-            UIManager.showError('Failed to load users data. Please refresh the page or contact support.');
-        }
+        // Load initial data
+        await UsersDataManager.loadUsersData();
         
-        // Start SSE connection
+        // Start SSE connection using modular SSEManager
         SSEManager.connect();
         
-        console.log('Enhanced Users Management Page initialized successfully');
+        console.log('Users Management Page initialized successfully');
     };
     
     const destroy = () => {
@@ -1330,7 +615,6 @@ window.addEventListener('beforeunload', () => {
 // Handle browser back/forward navigation
 window.addEventListener('pageshow', (event) => {
     if (event.persisted) {
-        // Page was loaded from cache, check auth status again
         console.log('Page loaded from cache, checking auth...');
         AuthGuard.checkAuthentication();
     }

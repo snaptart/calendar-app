@@ -1,5 +1,5 @@
 /**
- * Manages modal dialogs for event creation/editing
+ * Enhanced Modal Manager for generic modal dialogs
  * Location: frontend/js/ui/modal-manager.js
  */
 import { EventBus } from '../core/event-bus.js';
@@ -9,6 +9,271 @@ import { DateTimeManager } from '../calendar/datetime-manager.js';
 
 export const ModalManager = (() => {
     let currentEvent = null;
+    let activeModals = new Map();
+    let modalIdCounter = 0;
+    
+    /**
+     * Create a generic modal dialog
+     */
+    const create = (options = {}) => {
+        const modalId = `modal_${++modalIdCounter}`;
+        
+        const defaultOptions = {
+            title: 'Modal',
+            body: '',
+            footer: '',
+            size: 'medium', // small, medium, large, xl
+            closable: true,
+            backdrop: true,
+            keyboard: true,
+            className: ''
+        };
+        
+        const config = { ...defaultOptions, ...options };
+        
+        // Create modal HTML
+        const modalHtml = `
+            <div class="modal fade" id="${modalId}" tabindex="-1" role="dialog" aria-labelledby="${modalId}Label" aria-hidden="true" data-backdrop="${config.backdrop ? 'true' : 'static'}" data-keyboard="${config.keyboard}">
+                <div class="modal-dialog modal-${config.size} ${config.className}" role="document">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title" id="${modalId}Label">${config.title}</h5>
+                            ${config.closable ? '<button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>' : ''}
+                        </div>
+                        <div class="modal-body">
+                            ${config.body}
+                        </div>
+                        ${config.footer ? `<div class="modal-footer">${config.footer}</div>` : ''}
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        // Add modal to DOM
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+        const modalElement = document.getElementById(modalId);
+        
+        // Store modal info
+        const modalInfo = {
+            id: modalId,
+            element: modalElement,
+            config,
+            isOpen: false
+        };
+        
+        activeModals.set(modalId, modalInfo);
+        
+        // Set up event listeners for this modal
+        setupGenericModalEvents(modalInfo);
+        
+        // Return modal API
+        return {
+            show: () => showGenericModal(modalId),
+            hide: () => hideGenericModal(modalId),
+            destroy: () => destroyGenericModal(modalId),
+            update: (newOptions) => updateGenericModal(modalId, newOptions),
+            getId: () => modalId,
+            getElement: () => modalElement
+        };
+    };
+    
+    /**
+     * Show a generic modal
+     */
+    const showGenericModal = (modalId) => {
+        const modalInfo = activeModals.get(modalId);
+        if (!modalInfo) return false;
+        
+        const modal = modalInfo.element;
+        
+        // Use Bootstrap modal if available, otherwise custom implementation
+        if (typeof $ !== 'undefined' && $.fn.modal) {
+            $(modal).modal('show');
+        } else {
+            modal.style.display = 'block';
+            modal.classList.add('show');
+            document.body.classList.add('modal-open');
+            
+            // Add backdrop
+            if (modalInfo.config.backdrop) {
+                const backdrop = document.createElement('div');
+                backdrop.className = 'modal-backdrop fade show';
+                backdrop.id = `${modalId}_backdrop`;
+                document.body.appendChild(backdrop);
+            }
+        }
+        
+        modalInfo.isOpen = true;
+        
+        EventBus.emit('modal:shown', { modalId, config: modalInfo.config });
+        return true;
+    };
+    
+    /**
+     * Hide a generic modal
+     */
+    const hideGenericModal = (modalId) => {
+        const modalInfo = activeModals.get(modalId);
+        if (!modalInfo) return false;
+        
+        const modal = modalInfo.element;
+        
+        if (typeof $ !== 'undefined' && $.fn.modal) {
+            $(modal).modal('hide');
+        } else {
+            modal.style.display = 'none';
+            modal.classList.remove('show');
+            
+            // Remove backdrop
+            const backdrop = document.getElementById(`${modalId}_backdrop`);
+            if (backdrop) {
+                backdrop.remove();
+            }
+            
+            // Check if any modals are still open
+            const openModals = Array.from(activeModals.values()).filter(m => m.isOpen && m.id !== modalId);
+            if (openModals.length === 0) {
+                document.body.classList.remove('modal-open');
+            }
+        }
+        
+        modalInfo.isOpen = false;
+        
+        EventBus.emit('modal:hidden', { modalId, config: modalInfo.config });
+        return true;
+    };
+    
+    /**
+     * Destroy a generic modal
+     */
+    const destroyGenericModal = (modalId) => {
+        const modalInfo = activeModals.get(modalId);
+        if (!modalInfo) return false;
+        
+        // Hide first if open
+        if (modalInfo.isOpen) {
+            hideGenericModal(modalId);
+        }
+        
+        // Remove from DOM
+        modalInfo.element.remove();
+        
+        // Remove backdrop if exists
+        const backdrop = document.getElementById(`${modalId}_backdrop`);
+        if (backdrop) {
+            backdrop.remove();
+        }
+        
+        // Remove from tracking
+        activeModals.delete(modalId);
+        
+        EventBus.emit('modal:destroyed', { modalId });
+        return true;
+    };
+    
+    /**
+     * Update modal content
+     */
+    const updateGenericModal = (modalId, options) => {
+        const modalInfo = activeModals.get(modalId);
+        if (!modalInfo) return false;
+        
+        const modal = modalInfo.element;
+        
+        if (options.title) {
+            const titleElement = modal.querySelector('.modal-title');
+            if (titleElement) titleElement.textContent = options.title;
+        }
+        
+        if (options.body) {
+            const bodyElement = modal.querySelector('.modal-body');
+            if (bodyElement) bodyElement.innerHTML = options.body;
+        }
+        
+        if (options.footer !== undefined) {
+            let footerElement = modal.querySelector('.modal-footer');
+            if (options.footer) {
+                if (!footerElement) {
+                    footerElement = document.createElement('div');
+                    footerElement.className = 'modal-footer';
+                    modal.querySelector('.modal-content').appendChild(footerElement);
+                }
+                footerElement.innerHTML = options.footer;
+            } else if (footerElement) {
+                footerElement.remove();
+            }
+        }
+        
+        // Update config
+        modalInfo.config = { ...modalInfo.config, ...options };
+        
+        EventBus.emit('modal:updated', { modalId, options });
+        return true;
+    };
+    
+    /**
+     * Set up event listeners for generic modal
+     */
+    const setupGenericModalEvents = (modalInfo) => {
+        const modal = modalInfo.element;
+        
+        // Close button
+        const closeBtn = modal.querySelector('.close');
+        if (closeBtn) {
+            closeBtn.addEventListener('click', () => hideGenericModal(modalInfo.id));
+        }
+        
+        // Backdrop click
+        if (modalInfo.config.backdrop) {
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) {
+                    hideGenericModal(modalInfo.id);
+                }
+            });
+        }
+        
+        // Keyboard events
+        if (modalInfo.config.keyboard) {
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape' && modalInfo.isOpen) {
+                    hideGenericModal(modalInfo.id);
+                }
+            });
+        }
+    };
+    
+    /**
+     * Close the most recently opened modal
+     */
+    const closeActive = () => {
+        const openModals = Array.from(activeModals.values()).filter(m => m.isOpen);
+        if (openModals.length > 0) {
+            const lastModal = openModals[openModals.length - 1];
+            hideGenericModal(lastModal.id);
+        }
+    };
+    
+    /**
+     * Close all open modals
+     */
+    const closeAll = () => {
+        activeModals.forEach((modalInfo) => {
+            if (modalInfo.isOpen) {
+                hideGenericModal(modalInfo.id);
+            }
+        });
+    };
+    
+    /**
+     * Get list of open modals
+     */
+    const getOpenModals = () => {
+        return Array.from(activeModals.values()).filter(m => m.isOpen).map(m => m.id);
+    };
+    
+    // ===========================================================================
+    // LEGACY EVENT MODAL FUNCTIONALITY (preserved for backward compatibility)
+    // ===========================================================================
     
     const openModal = (eventData = {}) => {
         const modal = document.getElementById('eventModal');
@@ -184,6 +449,13 @@ export const ModalManager = (() => {
     EventBus.on('event:deleted', closeModal);
     
     return {
+        // Generic modal API
+        create,
+        closeActive,
+        closeAll,
+        getOpenModals,
+        
+        // Legacy event modal API (preserved for backward compatibility)
         openModal,
         closeModal,
         getCurrentEvent,

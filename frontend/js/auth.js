@@ -1,15 +1,22 @@
-// Authentication System for Collaborative Calendar
-// Location: frontend/js/auth.js
+/**
+ * Authentication Page - Refactored to use modular components
+ * Location: frontend/js/auth.js
+ * 
+ * This file has been refactored to use shared utilities where possible
+ * while maintaining its page-specific authentication functionality.
+ */
+
+// Import shared utilities
+import { Config } from './core/config.js';
+import { Utils } from './core/utils.js';
 
 // =============================================================================
 // AUTHENTICATION UTILITIES
 // =============================================================================
 
 const AuthUtils = {
-    apiEndpoint: 'backend/api.php',
-    
     /**
-     * Make authenticated API request
+     * Make authenticated API request using shared Config
      */
     async makeRequest(url, options = {}) {
         try {
@@ -50,286 +57,274 @@ const AuthUtils = {
     },
     
     /**
-     * Show message to user
+     * Show form validation errors
      */
-    showMessage(message, type = 'error') {
-        const errorEl = document.getElementById('errorMessage');
-        const successEl = document.getElementById('successMessage');
+    showFormError(fieldId, message) {
+        const field = document.getElementById(fieldId);
+        const errorElement = field?.parentNode.querySelector('.error-message');
         
-        // Hide all messages first
-        errorEl.style.display = 'none';
-        successEl.style.display = 'none';
-        
-        // Show appropriate message
-        if (type === 'error') {
-            errorEl.textContent = message;
-            errorEl.style.display = 'block';
-        } else {
-            successEl.textContent = message;
-            successEl.style.display = 'block';
+        if (field) {
+            field.classList.add('error');
         }
         
-        // Auto-hide after 5 seconds
-        setTimeout(() => {
-            errorEl.style.display = 'none';
-            successEl.style.display = 'none';
-        }, 5000);
+        if (errorElement) {
+            errorElement.textContent = message;
+            errorElement.style.display = 'block';
+        }
     },
     
     /**
-     * Set loading state for button
+     * Clear form validation errors
      */
-    setButtonLoading(button, isLoading) {
-        if (isLoading) {
+    clearFormErrors() {
+        document.querySelectorAll('.error').forEach(el => el.classList.remove('error'));
+        document.querySelectorAll('.error-message').forEach(el => {
+            el.textContent = '';
+            el.style.display = 'none';
+        });
+    },
+    
+    /**
+     * Show loading state
+     */
+    showLoading(buttonId, loadingText = 'Loading...') {
+        const button = document.getElementById(buttonId);
+        if (button) {
             button.disabled = true;
-            button.classList.add('loading');
-        } else {
-            button.disabled = false;
-            button.classList.remove('loading');
+            button.setAttribute('data-original-text', button.textContent);
+            button.textContent = loadingText;
         }
     },
     
     /**
-     * Redirect to calendar page
+     * Hide loading state
      */
-    redirectToCalendar() {
-        window.location.href = 'index.php';
+    hideLoading(buttonId) {
+        const button = document.getElementById(buttonId);
+        if (button) {
+            button.disabled = false;
+            const originalText = button.getAttribute('data-original-text');
+            if (originalText) {
+                button.textContent = originalText;
+                button.removeAttribute('data-original-text');
+            }
+        }
     }
 };
 
 // =============================================================================
-// AUTHENTICATION API CLIENT
+// AUTHENTICATION MANAGER
 // =============================================================================
 
-const AuthAPI = {
+const AuthManager = {
     /**
-     * Login user
+     * Handle user login
      */
     async login(email, password, rememberMe = false) {
-        return AuthUtils.makeRequest(AuthUtils.apiEndpoint, {
-            method: 'POST',
-            body: JSON.stringify({
-                action: 'login',
-                email,
-                password,
-                rememberMe
-            })
-        });
-    },
-    
-    /**
-     * Register new user
-     */
-    async register(name, email, password) {
-        return AuthUtils.makeRequest(AuthUtils.apiEndpoint, {
-            method: 'POST',
-            body: JSON.stringify({
-                action: 'register',
-                name,
-                email,
-                password
-            })
-        });
-    },
-    
-    /**
-     * Check if user is authenticated
-     */
-    async checkAuth() {
-        return AuthUtils.makeRequest(`${AuthUtils.apiEndpoint}?action=check_auth`);
-    },
-    
-    /**
-     * Logout user
-     */
-    async logout() {
-        return AuthUtils.makeRequest(AuthUtils.apiEndpoint, {
-            method: 'POST',
-            body: JSON.stringify({
-                action: 'logout'
-            })
-        });
-    }
-};
-
-// =============================================================================
-// TAB MANAGEMENT
-// =============================================================================
-
-const TabManager = {
-    init() {
-        const tabs = document.querySelectorAll('.auth-tab');
-        const forms = document.querySelectorAll('.auth-form');
-        
-        tabs.forEach(tab => {
-            tab.addEventListener('click', () => {
-                const targetTab = tab.dataset.tab;
-                
-                // Update tab states
-                tabs.forEach(t => t.classList.remove('active'));
-                tab.classList.add('active');
-                
-                // Update form states
-                forms.forEach(form => {
-                    form.classList.remove('active');
-                    if (form.id === `${targetTab}Form`) {
-                        form.classList.add('active');
-                    }
-                });
-                
-                // Clear any messages
-                AuthUtils.showMessage('', 'clear');
-            });
-        });
-    }
-};
-
-// =============================================================================
-// LOGIN FORM HANDLER
-// =============================================================================
-
-const LoginForm = {
-    init() {
-        const form = document.getElementById('loginForm');
-        if (!form) return;
-        
-        form.addEventListener('submit', this.handleSubmit.bind(this));
-    },
-    
-    async handleSubmit(e) {
-        e.preventDefault();
-        
-        const email = document.getElementById('loginEmail').value.trim();
-        const password = document.getElementById('loginPassword').value;
-        const rememberMe = document.getElementById('rememberMe').checked;
-        const submitButton = e.target.querySelector('button[type="submit"]');
-        
-        // Validate input
-        if (!AuthUtils.validateEmail(email)) {
-            AuthUtils.showMessage('Please enter a valid email address');
-            return;
-        }
-        
-        if (!password) {
-            AuthUtils.showMessage('Please enter your password');
-            return;
-        }
-        
         try {
-            AuthUtils.setButtonLoading(submitButton, true);
+            AuthUtils.clearFormErrors();
+            AuthUtils.showLoading('loginBtn', 'Signing in...');
             
-            const response = await AuthAPI.login(email, password, rememberMe);
+            // Validate inputs
+            if (!email || !AuthUtils.validateEmail(email)) {
+                AuthUtils.showFormError('email', 'Please enter a valid email address');
+                return false;
+            }
+            
+            if (!password || !AuthUtils.validatePassword(password)) {
+                AuthUtils.showFormError('password', 'Password must be at least 6 characters');
+                return false;
+            }
+            
+            // Make login request using shared Config
+            const response = await AuthUtils.makeRequest(Config.apiEndpoints.api, {
+                method: 'POST',
+                body: JSON.stringify({
+                    action: 'login',
+                    email,
+                    password,
+                    remember_me: rememberMe
+                })
+            });
             
             if (response.success) {
-                AuthUtils.showMessage('Login successful! Redirecting...', 'success');
-                
-                // Redirect after a short delay
-                setTimeout(() => {
-                    AuthUtils.redirectToCalendar();
-                }, 1000);
+                // Successful login - redirect to main application
+                window.location.href = response.redirect || 'pages/calendar.php';
+                return true;
             } else {
-                AuthUtils.showMessage(response.error || 'Login failed');
+                throw new Error(response.error || 'Login failed');
             }
             
         } catch (error) {
             console.error('Login error:', error);
-            AuthUtils.showMessage(error.message || 'Login failed. Please try again.');
+            this.showAuthError(error.message);
+            return false;
         } finally {
-            AuthUtils.setButtonLoading(submitButton, false);
+            AuthUtils.hideLoading('loginBtn');
         }
-    }
-};
-
-// =============================================================================
-// REGISTRATION FORM HANDLER
-// =============================================================================
-
-const RegisterForm = {
-    init() {
-        const form = document.getElementById('registerForm');
-        if (!form) return;
-        
-        form.addEventListener('submit', this.handleSubmit.bind(this));
     },
     
-    async handleSubmit(e) {
-        e.preventDefault();
-        
-        const name = document.getElementById('registerName').value.trim();
-        const email = document.getElementById('registerEmail').value.trim();
-        const password = document.getElementById('registerPassword').value;
-        const confirmPassword = document.getElementById('confirmPassword').value;
-        const submitButton = e.target.querySelector('button[type="submit"]');
-        
-        // Validate input
-        if (!name || name.length < 2) {
-            AuthUtils.showMessage('Please enter a valid name (at least 2 characters)');
-            return;
-        }
-        
-        if (!AuthUtils.validateEmail(email)) {
-            AuthUtils.showMessage('Please enter a valid email address');
-            return;
-        }
-        
-        if (!AuthUtils.validatePassword(password)) {
-            AuthUtils.showMessage('Password must be at least 6 characters long');
-            return;
-        }
-        
-        if (password !== confirmPassword) {
-            AuthUtils.showMessage('Passwords do not match');
-            return;
-        }
-        
+    /**
+     * Handle user registration
+     */
+    async register(name, email, password, confirmPassword) {
         try {
-            AuthUtils.setButtonLoading(submitButton, true);
+            AuthUtils.clearFormErrors();
+            AuthUtils.showLoading('registerBtn', 'Creating account...');
             
-            const response = await AuthAPI.register(name, email, password);
+            // Validate inputs
+            if (!name || name.trim().length < 2) {
+                AuthUtils.showFormError('name', 'Name must be at least 2 characters');
+                return false;
+            }
+            
+            if (!email || !AuthUtils.validateEmail(email)) {
+                AuthUtils.showFormError('email', 'Please enter a valid email address');
+                return false;
+            }
+            
+            if (!password || !AuthUtils.validatePassword(password)) {
+                AuthUtils.showFormError('password', 'Password must be at least 6 characters');
+                return false;
+            }
+            
+            if (password !== confirmPassword) {
+                AuthUtils.showFormError('confirmPassword', 'Passwords do not match');
+                return false;
+            }
+            
+            // Make registration request using shared Config
+            const response = await AuthUtils.makeRequest(Config.apiEndpoints.api, {
+                method: 'POST',
+                body: JSON.stringify({
+                    action: 'register',
+                    name: name.trim(),
+                    email,
+                    password
+                })
+            });
             
             if (response.success) {
-                AuthUtils.showMessage('Account created successfully! You can now sign in.', 'success');
-                
-                // Switch to login tab after successful registration
-                setTimeout(() => {
-                    document.querySelector('.auth-tab[data-tab="login"]').click();
-                    
-                    // Pre-fill email in login form
-                    document.getElementById('loginEmail').value = email;
-                }, 1500);
+                this.showAuthSuccess('Registration successful! Please log in.');
+                this.switchToLogin();
+                return true;
             } else {
-                AuthUtils.showMessage(response.error || 'Registration failed');
+                throw new Error(response.error || 'Registration failed');
             }
             
         } catch (error) {
             console.error('Registration error:', error);
-            AuthUtils.showMessage(error.message || 'Registration failed. Please try again.');
+            this.showAuthError(error.message);
+            return false;
         } finally {
-            AuthUtils.setButtonLoading(submitButton, false);
+            AuthUtils.hideLoading('registerBtn');
+        }
+    },
+    
+    /**
+     * Switch between login and registration forms
+     */
+    switchToLogin() {
+        document.getElementById('loginForm')?.classList.remove('hidden');
+        document.getElementById('registerForm')?.classList.add('hidden');
+        document.getElementById('loginTab')?.classList.add('active');
+        document.getElementById('registerTab')?.classList.remove('active');
+        AuthUtils.clearFormErrors();
+    },
+    
+    switchToRegister() {
+        document.getElementById('loginForm')?.classList.add('hidden');
+        document.getElementById('registerForm')?.classList.remove('hidden');
+        document.getElementById('loginTab')?.classList.remove('active');
+        document.getElementById('registerTab')?.classList.add('active');
+        AuthUtils.clearFormErrors();
+    },
+    
+    /**
+     * Show authentication success message
+     */
+    showAuthSuccess(message) {
+        const alertDiv = document.getElementById('authAlert');
+        if (alertDiv) {
+            alertDiv.className = 'alert alert-success';
+            alertDiv.textContent = message;
+            alertDiv.style.display = 'block';
+            
+            // Auto-hide after 5 seconds
+            setTimeout(() => {
+                alertDiv.style.display = 'none';
+            }, 5000);
+        }
+    },
+    
+    /**
+     * Show authentication error message
+     */
+    showAuthError(message) {
+        const alertDiv = document.getElementById('authAlert');
+        if (alertDiv) {
+            alertDiv.className = 'alert alert-error';
+            alertDiv.textContent = message;
+            alertDiv.style.display = 'block';
         }
     }
 };
 
 // =============================================================================
-// AUTH GUARD - Check if user is already logged in
+// EVENT HANDLERS
 // =============================================================================
 
-const AuthGuard = {
-    async init() {
-        try {
-            const response = await AuthAPI.checkAuth();
-            
-            if (response.authenticated) {
-                // User is already logged in, redirect to calendar
-                console.log('User already authenticated:', response.user);
-                AuthUtils.redirectToCalendar();
-                return true;
-            }
-        } catch (error) {
-            console.log('User not authenticated or session expired');
-        }
+const AuthEventHandlers = {
+    /**
+     * Initialize all event handlers
+     */
+    init() {
+        // Tab switching
+        document.getElementById('loginTab')?.addEventListener('click', () => {
+            AuthManager.switchToLogin();
+        });
         
-        return false;
+        document.getElementById('registerTab')?.addEventListener('click', () => {
+            AuthManager.switchToRegister();
+        });
+        
+        // Form submissions
+        document.getElementById('loginForm')?.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const email = document.getElementById('email')?.value;
+            const password = document.getElementById('password')?.value;
+            const rememberMe = document.getElementById('rememberMe')?.checked;
+            
+            await AuthManager.login(email, password, rememberMe);
+        });
+        
+        document.getElementById('registerForm')?.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const name = document.getElementById('name')?.value;
+            const email = document.getElementById('registerEmail')?.value;
+            const password = document.getElementById('registerPassword')?.value;
+            const confirmPassword = document.getElementById('confirmPassword')?.value;
+            
+            await AuthManager.register(name, email, password, confirmPassword);
+        });
+        
+        // Clear errors on input focus
+        document.querySelectorAll('input').forEach(input => {
+            input.addEventListener('focus', () => {
+                input.classList.remove('error');
+                const errorElement = input.parentNode.querySelector('.error-message');
+                if (errorElement) {
+                    errorElement.style.display = 'none';
+                }
+            });
+        });
+        
+        // Hide alerts on click
+        document.getElementById('authAlert')?.addEventListener('click', function() {
+            this.style.display = 'none';
+        });
     }
 };
 
@@ -337,36 +332,17 @@ const AuthGuard = {
 // APPLICATION INITIALIZATION
 // =============================================================================
 
-const AuthApp = {
-    async init() {
-        console.log('Initializing Authentication System...');
-        
-        // Check if user is already logged in
-        const isAuthenticated = await AuthGuard.init();
-        
-        if (!isAuthenticated) {
-            // Initialize UI components
-            TabManager.init();
-            LoginForm.init();
-            RegisterForm.init();
-            
-            // Focus on email field
-            document.getElementById('loginEmail')?.focus();
-            
-            console.log('Authentication system initialized');
-        }
-    }
-};
-
-// Initialize when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
-    AuthApp.init();
+    console.log('Initializing Authentication Page...');
+    
+    // Initialize event handlers
+    AuthEventHandlers.init();
+    
+    // Show login form by default
+    AuthManager.switchToLogin();
+    
+    console.log('Authentication Page initialized successfully');
 });
 
-// Handle browser back/forward navigation
-window.addEventListener('pageshow', (event) => {
-    if (event.persisted) {
-        // Page was loaded from cache, check auth status again
-        AuthGuard.init();
-    }
-});
+// Make AuthManager available globally if needed
+window.AuthManager = AuthManager;

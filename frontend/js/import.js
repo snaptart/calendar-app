@@ -1,735 +1,333 @@
-// Enhanced Import Page JavaScript with Full Functionality
-// Location: frontend/js/import.js
-// 
-// FIXED VERSION - Complete import functionality with validation, preview, and import
+/**
+ * Import Page - Refactored to use modular components
+ * Location: frontend/js/import.js
+ * 
+ * This file has been refactored to eliminate code duplication by using
+ * the existing modular components instead of recreating them.
+ */
+
+// Import modular components
+import { EventBus } from './core/event-bus.js';
+import { Config } from './core/config.js';
+import { Utils } from './core/utils.js';
+import { APIClient } from './core/api-client.js';
+import { AuthGuard } from './auth/auth-guard.js';
+import { UIManager } from './ui/ui-manager.js';
+import { ModalManager } from './ui/modal-manager.js';
 
 // =============================================================================
-// CORE UTILITIES AND EVENT BUS
+// PAGE-SPECIFIC CONFIGURATION
 // =============================================================================
 
-/**
- * Simple Event Bus for component communication
- */
-const EventBus = (() => {
-    const events = {};
-    
-    return {
-        on(event, callback) {
-            if (!events[event]) events[event] = [];
-            events[event].push(callback);
-        },
-        
-        off(event, callback) {
-            if (!events[event]) return;
-            events[event] = events[event].filter(cb => cb !== callback);
-        },
-        
-        emit(event, data) {
-            if (!events[event]) return;
-            events[event].forEach(callback => {
-                try {
-                    callback(data);
-                } catch (error) {
-                    console.error(`Error in event listener for ${event}:`, error);
-                }
-            });
-        }
-    };
-})();
-
-/**
- * Configuration object for API endpoints and limits
- */
-const Config = {
-    apiEndpoints: {
-        api: 'backend/api.php',
-        import: 'backend/api.php'  // Use main API endpoint for all operations
-    },
+const ImportConfig = {
     limits: {
         maxFileSize: 5 * 1024 * 1024, // 5MB
         maxEvents: 20,
-        allowedTypes: ['.json', '.csv', '.ics', '.ical', '.txt']
+        supportedFormats: ['json', 'csv', 'ics']
     },
-    formats: {
-        json: { name: 'JSON', icon: '📄' },
-        csv: { name: 'CSV', icon: '📊' },
-        ics: { name: 'iCalendar', icon: '📅' }
-    }
-};
-
-/**
- * Utility functions
- */
-const Utils = {
-    formatFileSize(bytes) {
-        if (bytes === 0) return '0 Bytes';
-        const k = 1024;
-        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-        const i = Math.floor(Math.log(bytes) / Math.log(k));
-        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-    },
-    
-    getFileExtension(filename) {
-        return filename.toLowerCase().substring(filename.lastIndexOf('.'));
-    },
-    
-    detectFileFormat(filename) {
-        const ext = this.getFileExtension(filename);
-        if (['.json'].includes(ext)) return 'json';
-        if (['.csv', '.txt'].includes(ext)) return 'csv';
-        if (['.ics', '.ical'].includes(ext)) return 'ics';
-        return 'unknown';
-    },
-    
-    formatDateTime(dateString) {
-        if (!dateString) return 'N/A';
-        try {
-            const date = new Date(dateString);
-            return date.toLocaleString('en-US', {
-                year: 'numeric',
-                month: 'short',
-                day: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit'
-            });
-        } catch (error) {
-            return dateString;
-        }
-    },
-    
-    showNotification(message, type = 'info', duration = 5000) {
-        const notification = document.createElement('div');
-        notification.className = `notification ${type}`;
-        notification.style.cssText = `
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            z-index: 10000;
-            max-width: 400px;
-            padding: 16px 20px;
-            border-radius: 8px;
-            font-size: 0.875rem;
-            font-weight: 500;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-            animation: slideInRight 0.3s ease-out;
-        `;
-        
-        // Set colors based on type
-        const colors = {
-            success: { bg: '#c6f6d5', text: '#22543d', border: '#68d391' },
-            error: { bg: '#fed7d7', text: '#742a2a', border: '#fc8181' },
-            warning: { bg: '#faf089', text: '#744210', border: '#f6e05e' },
-            info: { bg: '#bee3f8', text: '#2a4365', border: '#90cdf4' }
-        };
-        
-        const color = colors[type] || colors.info;
-        notification.style.backgroundColor = color.bg;
-        notification.style.color = color.text;
-        notification.style.border = `1px solid ${color.border}`;
-        
-        notification.innerHTML = `
-            ${message}
-            <button style="float: right; background: none; border: none; font-size: 18px; cursor: pointer; color: inherit; margin-left: 12px;">&times;</button>
-        `;
-        
-        document.body.appendChild(notification);
-        
-        // Auto remove
-        setTimeout(() => {
-            notification.style.animation = 'slideOutRight 0.3s ease-out forwards';
-            setTimeout(() => notification.remove(), 300);
-        }, duration);
-        
-        // Manual close
-        notification.querySelector('button').onclick = () => {
-            notification.style.animation = 'slideOutRight 0.3s ease-out forwards';
-            setTimeout(() => notification.remove(), 300);
-        };
-    },
-    
-    addAnimationStyles() {
-        if (!document.getElementById('import-animations')) {
-            const style = document.createElement('style');
-            style.id = 'import-animations';
-            style.textContent = `
-                @keyframes slideInRight {
-                    from { transform: translateX(100%); opacity: 0; }
-                    to { transform: translateX(0); opacity: 1; }
-                }
-                @keyframes slideOutRight {
-                    from { transform: translateX(0); opacity: 1; }
-                    to { transform: translateX(100%); opacity: 0; }
-                }
-            `;
-            document.head.appendChild(style);
-        }
+    fileTypes: {
+        json: 'application/json',
+        csv: 'text/csv',
+        ics: 'text/calendar'
     }
 };
 
 // =============================================================================
-// API CLIENT - FIXED
+// PAGE-SPECIFIC COMPONENTS
 // =============================================================================
 
 /**
- * FIXED API communication for import operations
- */
-const ImportAPI = (() => {
-    const makeRequest = async (url, options = {}) => {
-        try {
-            console.log('Making request to:', url);
-            console.log('Request options:', options);
-            
-            const response = await fetch(url, {
-                credentials: 'include',
-                ...options
-            });
-            
-            console.log('Response status:', response.status);
-            
-            if (response.status === 401) {
-                EventBus.emit('auth:unauthorized');
-                throw new Error('Authentication required');
-            }
-            
-            if (!response.ok) {
-                let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
-                try {
-                    const errorData = await response.json();
-                    if (errorData.error) {
-                        errorMessage = errorData.error;
-                    }
-                } catch (e) {
-                    // If we can't parse JSON, use the status text
-                    console.warn('Could not parse error response as JSON');
-                }
-                throw new Error(errorMessage);
-            }
-            
-            const data = await response.json();
-            console.log('Response data:', data);
-            return data;
-        } catch (error) {
-            console.error('Import API Request failed:', error);
-            throw error;
-        }
-    };
-    
-    return {
-        // Authentication check
-        checkAuth() {
-            return makeRequest(`${Config.apiEndpoints.api}?action=check_auth`);
-        },
-        
-        // FIXED: Validate import file with correct action parameter
-        validateFile(file) {
-            const formData = new FormData();
-            formData.append('import_file', file);
-            formData.append('action', 'validate_import_file'); // FIXED: Use correct action name
-            
-            console.log('Validating file:', file.name, 'size:', file.size);
-            
-            return makeRequest(Config.apiEndpoints.api, {
-                method: 'POST',
-                body: formData
-            });
-        },
-        
-        // FIXED: Preview import file with correct action parameter
-        previewFile(file) {
-            const formData = new FormData();
-            formData.append('import_file', file);
-            formData.append('action', 'preview_import'); // FIXED: Use correct action name
-            
-            console.log('Previewing file:', file.name, 'size:', file.size);
-            
-            return makeRequest(Config.apiEndpoints.api, {
-                method: 'POST',
-                body: formData
-            });
-        },
-        
-        // FIXED: Import events from file with correct action parameter
-        importEvents(file) {
-            const formData = new FormData();
-            formData.append('import_file', file);
-            formData.append('action', 'import_events'); // FIXED: Use correct action name
-            
-            console.log('Importing file:', file.name, 'size:', file.size);
-            
-            return makeRequest(Config.apiEndpoints.api, {
-                method: 'POST',
-                body: formData
-            });
-        },
-        
-        // FIXED: Get supported formats with correct action parameter
-        getSupportedFormats() {
-            return makeRequest(`${Config.apiEndpoints.api}?action=import_formats`); // FIXED: Use correct action name
-        }
-    };
-})();
-
-// =============================================================================
-// AUTHENTICATION GUARD
-// =============================================================================
-
-/**
- * Handles authentication checks and redirects
- */
-const AuthGuard = (() => {
-    let currentUser = null;
-    
-    const checkAuthentication = async () => {
-        try {
-            const response = await ImportAPI.checkAuth();
-            
-            if (response.authenticated) {
-                currentUser = response.user;
-                EventBus.emit('auth:authenticated', { user: response.user });
-                return true;
-            } else {
-                redirectToLogin();
-                return false;
-            }
-        } catch (error) {
-            console.error('Authentication check failed:', error);
-            redirectToLogin();
-            return false;
-        }
-    };
-    
-    const redirectToLogin = () => {
-        window.location.href = './login.html';
-    };
-    
-    const getCurrentUser = () => currentUser;
-    
-    const logout = async () => {
-        try {
-            await fetch(Config.apiEndpoints.api, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                credentials: 'include',
-                body: JSON.stringify({ action: 'logout' })
-            });
-        } catch (error) {
-            console.error('Logout error:', error);
-        } finally {
-            redirectToLogin();
-        }
-    };
-    
-    // Event listeners
-    EventBus.on('auth:unauthorized', redirectToLogin);
-    
-    return {
-        checkAuthentication,
-        getCurrentUser,
-        logout
-    };
-})();
-
-// =============================================================================
-// UI MANAGER
-// =============================================================================
-
-/**
- * Manages UI updates and visual feedback
- */
-const UIManager = (() => {
-    const updateConnectionStatus = (message, className = '') => {
-        const statusEl = document.getElementById('connectionStatus');
-        if (statusEl) {
-            statusEl.textContent = message;
-            statusEl.className = `status ${className}`;
-        }
-    };
-    
-    const updateUserStatus = (message, className = '') => {
-        const statusEl = document.getElementById('userStatus');
-        if (statusEl) {
-            statusEl.textContent = message;
-            statusEl.className = `status ${className}`;
-        }
-    };
-    
-    const setupAuthenticatedUI = (user) => {
-        const userNameInput = document.getElementById('userName');
-        if (userNameInput) {
-            userNameInput.value = user.name;
-            userNameInput.disabled = true;
-            userNameInput.style.backgroundColor = '#f7fafc';
-            userNameInput.style.color = '#2d3748';
-        }
-        
-        addLogoutButton();
-        updateUserStatus(`Logged in as: ${user.name}`, 'user-set');
-    };
-    
-    const addLogoutButton = () => {
-        const userSection = document.querySelector('.user-section');
-        if (userSection && !document.getElementById('logoutBtn')) {
-            const logoutBtn = document.createElement('button');
-            logoutBtn.id = 'logoutBtn';
-            logoutBtn.className = 'btn btn-small btn-outline';
-            logoutBtn.textContent = 'Logout';
-            logoutBtn.style.marginLeft = '8px';
-            
-            logoutBtn.addEventListener('click', () => {
-                if (confirm('Are you sure you want to logout?')) {
-                    AuthGuard.logout();
-                }
-            });
-            
-            userSection.appendChild(logoutBtn);
-        }
-    };
-    
-    const setButtonLoading = (button, isLoading) => {
-        if (isLoading) {
-            button.disabled = true;
-            button.classList.add('loading');
-            const originalText = button.textContent;
-            button.dataset.originalText = originalText;
-            button.textContent = 'Processing...';
-        } else {
-            button.disabled = false;
-            button.classList.remove('loading');
-            if (button.dataset.originalText) {
-                button.textContent = button.dataset.originalText;
-                delete button.dataset.originalText;
-            }
-        }
-    };
-    
-    const showProgressModal = (title, message) => {
-        const modal = document.getElementById('progressModal');
-        const titleEl = document.getElementById('progressTitle');
-        const messageEl = document.getElementById('progressMessage');
-        
-        if (modal && titleEl && messageEl) {
-            titleEl.textContent = title;
-            messageEl.textContent = message;
-            modal.style.display = 'block';
-        }
-    };
-    
-    const hideProgressModal = () => {
-        const modal = document.getElementById('progressModal');
-        if (modal) {
-            modal.style.display = 'none';
-        }
-    };
-    
-    // Event listeners
-    EventBus.on('auth:authenticated', ({ user }) => {
-        setupAuthenticatedUI(user);
-    });
-    
-    return {
-        updateConnectionStatus,
-        updateUserStatus,
-        setupAuthenticatedUI,
-        setButtonLoading,
-        showProgressModal,
-        hideProgressModal
-    };
-})();
-
-// =============================================================================
-// FILE MANAGER
-// =============================================================================
-
-/**
- * Manages file selection, validation, and display
+ * File handling and upload management
  */
 const FileManager = (() => {
-    let selectedFile = null;
-    let validationResult = null;
+    let currentFile = null;
+    let parsedData = null;
     
     const initializeFileHandling = () => {
-        const dropZone = document.getElementById('dropZone');
-        const fileInput = document.getElementById('importFile');
-        const clearBtn = document.getElementById('clearFile');
+        const fileInput = document.getElementById('fileInput');
+        const dropZone = document.getElementById('fileDropZone');
         
-        // File input change
-        fileInput.addEventListener('change', handleFileSelect);
+        if (fileInput) {
+            fileInput.addEventListener('change', handleFileSelect);
+        }
         
-        // Drag and drop
-        dropZone.addEventListener('dragover', handleDragOver);
-        dropZone.addEventListener('dragleave', handleDragLeave);
-        dropZone.addEventListener('drop', handleDrop);
-        dropZone.addEventListener('click', () => fileInput.click());
-        
-        // Clear file
-        clearBtn.addEventListener('click', clearFile);
+        if (dropZone) {
+            setupDropZone(dropZone);
+        }
     };
     
-    const handleFileSelect = (event) => {
-        const file = event.target.files[0];
+    const setupDropZone = (dropZone) => {
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('dragover');
+        });
+        
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('dragover');
+        });
+        
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleFile(files[0]);
+            }
+        });
+        
+        dropZone.addEventListener('click', () => {
+            document.getElementById('fileInput')?.click();
+        });
+    };
+    
+    const handleFileSelect = (e) => {
+        const file = e.target.files[0];
         if (file) {
-            processFile(file);
+            handleFile(file);
         }
     };
     
-    const handleDragOver = (event) => {
-        event.preventDefault();
-        event.currentTarget.classList.add('drag-over');
-    };
-    
-    const handleDragLeave = (event) => {
-        event.currentTarget.classList.remove('drag-over');
-    };
-    
-    const handleDrop = (event) => {
-        event.preventDefault();
-        event.currentTarget.classList.remove('drag-over');
-        
-        const files = event.dataTransfer.files;
-        if (files.length > 0) {
-            processFile(files[0]);
-        }
-    };
-    
-    const processFile = (file) => {
+    const handleFile = (file) => {
         // Validate file
-        const validation = validateFileBasic(file);
-        
+        const validation = validateFile(file);
         if (!validation.valid) {
-            Utils.showNotification(validation.error, 'error');
+            UIManager.showError(validation.error);
             return;
         }
         
-        selectedFile = file;
-        displayFileInfo(file);
-        updateButtonStates(true);
-        
+        currentFile = file;
+        updateFileInfo(file);
+        enableButtons(['validateBtn']);
         EventBus.emit('file:selected', { file });
     };
     
-    const validateFileBasic = (file) => {
-        // Check file size
-        if (file.size > Config.limits.maxFileSize) {
-            return {
-                valid: false,
-                error: `File size (${Utils.formatFileSize(file.size)}) exceeds maximum allowed size of ${Utils.formatFileSize(Config.limits.maxFileSize)}`
-            };
+    const validateFile = (file) => {
+        if (!file) {
+            return { valid: false, error: 'No file selected' };
         }
         
-        // Check file type
-        const extension = Utils.getFileExtension(file.name);
-        if (!Config.limits.allowedTypes.includes(extension)) {
-            return {
-                valid: false,
-                error: `File type "${extension}" is not supported. Allowed types: ${Config.limits.allowedTypes.join(', ')}`
-            };
+        if (file.size > ImportConfig.limits.maxFileSize) {
+            return { valid: false, error: `File size exceeds ${ImportConfig.limits.maxFileSize / 1024 / 1024}MB limit` };
+        }
+        
+        const extension = file.name.split('.').pop().toLowerCase();
+        if (!ImportConfig.limits.supportedFormats.includes(extension)) {
+            return { valid: false, error: `Unsupported file format. Supported: ${ImportConfig.limits.supportedFormats.join(', ')}` };
         }
         
         return { valid: true };
     };
     
-    const displayFileInfo = (file) => {
-        const fileInfo = document.getElementById('fileInfo');
-        const fileName = document.getElementById('fileName');
-        const fileSize = document.getElementById('fileSize');
-        
-        if (fileInfo && fileName && fileSize) {
-            fileName.textContent = file.name;
-            fileSize.textContent = Utils.formatFileSize(file.size);
-            fileInfo.style.display = 'block';
-            fileInfo.classList.add('fade-in');
-        }
-        
-        // Update file icon based on type
-        const fileIcon = document.querySelector('.file-icon');
-        if (fileIcon) {
-            const format = Utils.detectFileFormat(file.name);
-            const formatInfo = Config.formats[format];
-            if (formatInfo) {
-                fileIcon.textContent = formatInfo.icon;
-            }
+    const updateFileInfo = (file) => {
+        const infoDiv = document.getElementById('fileInfo');
+        if (infoDiv) {
+            infoDiv.innerHTML = `
+                <div class="file-details">
+                    <strong>File:</strong> ${file.name}<br>
+                    <strong>Size:</strong> ${(file.size / 1024).toFixed(2)} KB<br>
+                    <strong>Type:</strong> ${file.type || 'Unknown'}
+                </div>
+            `;
+            infoDiv.style.display = 'block';
         }
     };
     
-    const clearFile = () => {
-        selectedFile = null;
-        validationResult = null;
-        
-        const fileInput = document.getElementById('importFile');
-        const fileInfo = document.getElementById('fileInfo');
-        
-        if (fileInput) fileInput.value = '';
-        if (fileInfo) fileInfo.style.display = 'none';
-        
-        updateButtonStates(false);
-        clearResults();
-        
-        EventBus.emit('file:cleared');
-    };
-    
-    const updateButtonStates = (hasFile) => {
-        const buttons = ['validateBtn', 'previewBtn', 'importBtn'];
-        buttons.forEach(btnId => {
-            const btn = document.getElementById(btnId);
+    const enableButtons = (buttonIds) => {
+        buttonIds.forEach(id => {
+            const btn = document.getElementById(id);
             if (btn) {
-                btn.disabled = !hasFile;
+                btn.disabled = false;
+                btn.classList.remove('disabled');
             }
         });
     };
     
-    const clearResults = () => {
-        const resultsSection = document.getElementById('resultsSection');
-        if (resultsSection) {
-            resultsSection.style.display = 'none';
-        }
+    const disableButtons = (buttonIds) => {
+        buttonIds.forEach(id => {
+            const btn = document.getElementById(id);
+            if (btn) {
+                btn.disabled = true;
+                btn.classList.add('disabled');
+            }
+        });
     };
     
-    const getSelectedFile = () => selectedFile;
-    const getValidationResult = () => validationResult;
-    const setValidationResult = (result) => { validationResult = result; };
+    const getCurrentFile = () => currentFile;
+    const getParsedData = () => parsedData;
+    const setParsedData = (data) => { parsedData = data; };
     
     return {
         initializeFileHandling,
-        getSelectedFile,
-        getValidationResult,
-        setValidationResult,
-        clearFile
+        getCurrentFile,
+        getParsedData,
+        setParsedData,
+        enableButtons,
+        disableButtons
     };
 })();
 
-// =============================================================================
-// VALIDATION MANAGER
-// =============================================================================
-
 /**
- * Manages file validation and display of results
+ * File validation and parsing
  */
 const ValidationManager = (() => {
     const validateFile = async () => {
-        const file = FileManager.getSelectedFile();
+        const file = FileManager.getCurrentFile();
         if (!file) {
-            Utils.showNotification('Please select a file first', 'warning');
+            UIManager.showError('Please select a file first');
             return;
         }
         
-        const validateBtn = document.getElementById('validateBtn');
-        UIManager.setButtonLoading(validateBtn, true);
-        
         try {
-            UIManager.showProgressModal('Validating File', 'Please wait while we validate your file...');
+            UIManager.showLoadingOverlay('Validating file...');
             
-            const result = await ImportAPI.validateFile(file);
-            FileManager.setValidationResult(result);
+            const content = await readFileContent(file);
+            const parsed = await parseFileContent(content, file);
             
-            displayValidationResults(result);
+            FileManager.setParsedData(parsed);
             
-            if (result.valid) {
-                Utils.showNotification(`File is valid! Found ${result.event_count || 0} events to import.`, 'success');
-                
-                // Enable import button if validation passed
-                const importBtn = document.getElementById('importBtn');
-                if (importBtn) importBtn.disabled = false;
+            UIManager.hideLoadingOverlay();
+            UIManager.showSuccess(`File validated successfully! Found ${parsed.events.length} events.`);
+            
+            FileManager.enableButtons(['previewBtn']);
+            
+            if (parsed.events.length <= ImportConfig.limits.maxEvents) {
+                FileManager.enableButtons(['importBtn']);
             } else {
-                Utils.showNotification('File validation failed. Please check the results below.', 'error');
+                UIManager.showError(`Too many events (${parsed.events.length}). Maximum allowed: ${ImportConfig.limits.maxEvents}`);
             }
             
         } catch (error) {
             console.error('Validation error:', error);
-            Utils.showNotification(`Validation failed: ${error.message}`, 'error');
-            displayValidationError(error.message);
-        } finally {
-            UIManager.setButtonLoading(validateBtn, false);
-            UIManager.hideProgressModal();
+            UIManager.hideLoadingOverlay();
+            UIManager.showError('Validation failed: ' + error.message);
         }
     };
     
-    const displayValidationResults = (result) => {
-        const resultsSection = document.getElementById('resultsSection');
-        const resultsTitle = document.getElementById('resultsTitle');
-        const resultsBody = document.getElementById('resultsBody');
-        
-        if (!resultsSection || !resultsTitle || !resultsBody) return;
-        
-        resultsTitle.textContent = 'Validation Results';
-        
-        const cardClass = result.valid ? 'success' : 'error';
-        const icon = result.valid ? '✅' : '❌';
-        const title = result.valid ? 'File Valid' : 'Validation Failed';
-        const summary = result.valid 
-            ? `Your file is valid and ready for import. ${result.event_count || 0} events found.`
-            : `File validation failed. Please fix the issues below and try again.`;
-        
-        resultsBody.innerHTML = `
-            <div class="result-card ${cardClass}">
-                <div class="result-header">
-                    <span class="result-icon">${icon}</span>
-                    <h4 class="result-title">${title}</h4>
-                </div>
-                <p class="result-summary">${summary}</p>
-                
-                <div class="result-stats">
-                    <div class="stat-item">
-                        <span class="stat-number">${result.event_count || 0}</span>
-                        <span class="stat-label">Events Found</span>
-                    </div>
-                    <div class="stat-item">
-                        <span class="stat-number">${result.valid_count || 0}</span>
-                        <span class="stat-label">Valid Events</span>
-                    </div>
-                    <div class="stat-item">
-                        <span class="stat-number">${result.error_count || 0}</span>
-                        <span class="stat-label">Errors</span>
-                    </div>
-                    <div class="stat-item">
-                        <span class="stat-number">${result.warning_count || 0}</span>
-                        <span class="stat-label">Warnings</span>
-                    </div>
-                </div>
-                
-                ${result.errors && result.errors.length > 0 ? `
-                    <div class="result-details">
-                        <h5>Issues Found:</h5>
-                        ${result.errors.map(error => `<div class="detail-item error">${error}</div>`).join('')}
-                    </div>
-                ` : ''}
-                
-                ${result.warnings && result.warnings.length > 0 ? `
-                    <div class="result-details">
-                        <h5>Warnings:</h5>
-                        ${result.warnings.map(warning => `<div class="detail-item warning">${warning}</div>`).join('')}
-                    </div>
-                ` : ''}
-            </div>
-        `;
-        
-        resultsSection.style.display = 'block';
-        resultsSection.classList.add('slide-up');
+    const readFileContent = (file) => {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (e) => resolve(e.target.result);
+            reader.onerror = () => reject(new Error('Failed to read file'));
+            reader.readAsText(file);
+        });
     };
     
-    const displayValidationError = (errorMessage) => {
-        const resultsSection = document.getElementById('resultsSection');
-        const resultsTitle = document.getElementById('resultsTitle');
-        const resultsBody = document.getElementById('resultsBody');
+    const parseFileContent = async (content, file) => {
+        const extension = file.name.split('.').pop().toLowerCase();
         
-        if (!resultsSection || !resultsTitle || !resultsBody) return;
+        switch (extension) {
+            case 'json':
+                return parseJSON(content);
+            case 'csv':
+                return parseCSV(content);
+            case 'ics':
+                return parseICS(content);
+            default:
+                throw new Error('Unsupported file format');
+        }
+    };
+    
+    const parseJSON = (content) => {
+        try {
+            const data = JSON.parse(content);
+            const events = Array.isArray(data) ? data : (data.events || []);
+            
+            return {
+                format: 'json',
+                events: events.map(validateEventData)
+            };
+        } catch (error) {
+            throw new Error('Invalid JSON format');
+        }
+    };
+    
+    const parseCSV = (content) => {
+        const lines = content.split('\\n').filter(line => line.trim());
+        if (lines.length < 2) throw new Error('CSV must have header row and at least one data row');
         
-        resultsTitle.textContent = 'Validation Error';
+        const headers = lines[0].split(',').map(h => h.trim().replace(/\"/g, ''));
+        const events = [];
         
-        resultsBody.innerHTML = `
-            <div class="result-card error">
-                <div class="result-header">
-                    <span class="result-icon">❌</span>
-                    <h4 class="result-title">Validation Failed</h4>
-                </div>
-                <p class="result-summary">An error occurred while validating your file.</p>
-                <div class="result-details">
-                    <div class="detail-item error">${errorMessage}</div>
-                </div>
-            </div>
-        `;
+        for (let i = 1; i < lines.length; i++) {
+            const values = lines[i].split(',').map(v => v.trim().replace(/\"/g, ''));
+            const event = {};
+            
+            headers.forEach((header, index) => {
+                event[header.toLowerCase()] = values[index] || '';
+            });
+            
+            events.push(validateEventData(event));
+        }
         
-        resultsSection.style.display = 'block';
-        resultsSection.classList.add('slide-up');
+        return {
+            format: 'csv',
+            events
+        };
+    };
+    
+    const parseICS = (content) => {
+        const events = [];
+        const eventBlocks = content.split('BEGIN:VEVENT');
+        
+        for (let i = 1; i < eventBlocks.length; i++) {
+            const eventData = parseICSEvent(eventBlocks[i]);
+            if (eventData) {
+                events.push(validateEventData(eventData));
+            }
+        }
+        
+        return {
+            format: 'ics',
+            events
+        };
+    };
+    
+    const parseICSEvent = (eventBlock) => {
+        const lines = eventBlock.split('\\n');
+        const event = {};
+        
+        lines.forEach(line => {
+            if (line.includes(':')) {
+                const [key, ...valueParts] = line.split(':');
+                const value = valueParts.join(':').trim();
+                
+                switch (key.trim()) {
+                    case 'SUMMARY':
+                        event.title = value;
+                        break;
+                    case 'DTSTART':
+                        event.start = formatICSDateTime(value);
+                        break;
+                    case 'DTEND':
+                        event.end = formatICSDateTime(value);
+                        break;
+                    case 'DESCRIPTION':
+                        event.description = value;
+                        break;
+                }
+            }
+        });
+        
+        return event.title && event.start ? event : null;
+    };
+    
+    const formatICSDateTime = (icsDateTime) => {
+        // Convert ICS format (YYYYMMDDTHHMMSSZ) to MySQL format
+        const match = icsDateTime.match(/(\\d{4})(\\d{2})(\\d{2})T(\\d{2})(\\d{2})(\\d{2})/);
+        if (match) {
+            return `${match[1]}-${match[2]}-${match[3]} ${match[4]}:${match[5]}:${match[6]}`;
+        }
+        return icsDateTime;
+    };
+    
+    const validateEventData = (event) => {
+        return {
+            title: event.title || event.summary || 'Untitled Event',
+            start: Utils.formatDateTimeForAPI(event.start || event.dtstart),
+            end: Utils.formatDateTimeForAPI(event.end || event.dtend || event.start),
+            description: event.description || event.desc || ''
+        };
     };
     
     return {
@@ -737,448 +335,174 @@ const ValidationManager = (() => {
     };
 })();
 
-// =============================================================================
-// PREVIEW MANAGER - FIXED
-// =============================================================================
-
 /**
- * FIXED: Manages event preview functionality
+ * Preview management for parsed data
  */
 const PreviewManager = (() => {
-    let previewData = null;
-    
-    const previewFile = async () => {
-        const file = FileManager.getSelectedFile();
-        if (!file) {
-            Utils.showNotification('Please select a file first', 'warning');
+    const previewFile = () => {
+        const data = FileManager.getParsedData();
+        if (!data || !data.events.length) {
+            UIManager.showError('No valid data to preview. Please validate the file first.');
             return;
         }
         
-        const previewBtn = document.getElementById('previewBtn');
-        UIManager.setButtonLoading(previewBtn, true);
-        
-        try {
-            UIManager.showProgressModal('Generating Preview', 'Please wait while we analyze your file...');
-            
-            const result = await ImportAPI.previewFile(file);
-            previewData = result;
-            
-            // FIXED: Check for different response structures
-            if (result.valid && result.detailed_preview) {
-                showPreviewModal(result.detailed_preview);
-                Utils.showNotification(`Preview generated! Found ${result.total_events || result.event_count || 0} events.`, 'success');
-            } else if (result.valid && result.preview) {
-                // Handle alternative preview structure
-                showPreviewModal(result.preview);
-                Utils.showNotification(`Preview generated! Found ${result.event_count || 0} events.`, 'success');
-            } else if (result.event_count !== undefined) {
-                // Show validation results if no detailed preview
-                displayPreviewResults(result);
-                Utils.showNotification('File analyzed. Check results below for details.', 'info');
-            } else {
-                Utils.showNotification('Cannot preview file. Please validate first.', 'warning');
-                displayPreviewError(result.error || 'Unknown error during preview');
-            }
-            
-        } catch (error) {
-            console.error('Preview error:', error);
-            Utils.showNotification(`Preview failed: ${error.message}`, 'error');
-            displayPreviewError(error.message);
-        } finally {
-            UIManager.setButtonLoading(previewBtn, false);
-            UIManager.hideProgressModal();
-        }
+        showPreviewModal(data);
     };
     
-    const showPreviewModal = (previewEvents) => {
-        const modal = document.getElementById('previewModal');
-        const content = document.getElementById('previewContent');
+    const showPreviewModal = (data) => {
+        const modal = ModalManager.create({
+            title: `Preview: ${data.events.length} Events (${data.format.toUpperCase()})`,
+            size: 'large',
+            body: generatePreviewTable(data.events),
+            footer: `
+                <button class="btn btn-secondary" onclick="ModalManager.closeActive()">Close</button>
+                <button class="btn btn-primary" onclick="ImportManager.importEvents()">Import These Events</button>
+            `
+        });
         
-        if (!modal || !content) {
-            console.error('Preview modal elements not found');
-            return;
+        modal.show();
+    };
+    
+    const generatePreviewTable = (events) => {
+        if (!events.length) {
+            return '<p>No events to preview.</p>';
         }
         
-        // FIXED: Handle different preview data structures
-        let validEvents = [];
-        let invalidEvents = [];
-        
-        if (Array.isArray(previewEvents)) {
-            validEvents = previewEvents.filter(event => event.valid === true);
-            invalidEvents = previewEvents.filter(event => event.valid === false);
-        } else {
-            console.warn('Preview events is not an array:', previewEvents);
-            Utils.showNotification('Preview data format is unexpected', 'warning');
-            return;
-        }
-        
-        content.innerHTML = `
-            <div class="preview-summary">
-                <h4>Preview Summary</h4>
-                <div class="result-stats">
-                    <div class="stat-item">
-                        <span class="stat-number">${previewEvents.length}</span>
-                        <span class="stat-label">Total Events</span>
-                    </div>
-                    <div class="stat-item">
-                        <span class="stat-number">${validEvents.length}</span>
-                        <span class="stat-label">Valid Events</span>
-                    </div>
-                    <div class="stat-item">
-                        <span class="stat-number">${invalidEvents.length}</span>
-                        <span class="stat-label">Invalid Events</span>
-                    </div>
-                </div>
-            </div>
-            
-            ${validEvents.length > 0 ? `
-                <h4>Valid Events (will be imported):</h4>
-                <div class="preview-table-container">
-                    <table class="preview-table">
-                        <thead>
-                            <tr>
-                                <th>#</th>
-                                <th>Title</th>
-                                <th>Start</th>
-                                <th>End</th>
-                                <th>User</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${validEvents.map((event, index) => `
-                                <tr class="preview-row valid">
-                                    <td>${event.index || index + 1}</td>
-                                    <td>${event.title || 'N/A'}</td>
-                                    <td>${Utils.formatDateTime(event.start)}</td>
-                                    <td>${Utils.formatDateTime(event.end)}</td>
-                                    <td>User ID: ${event.user_id || 'Unknown'}</td>
-                                </tr>
-                            `).join('')}
-                        </tbody>
-                    </table>
-                </div>
-            ` : '<p>No valid events found in this file.</p>'}
-            
-            ${invalidEvents.length > 0 ? `
-                <h4>Invalid Events (will be skipped):</h4>
-                <div class="preview-table-container">
-                    <table class="preview-table">
-                        <thead>
-                            <tr>
-                                <th>#</th>
-                                <th>Error</th>
-                                <th>Raw Data</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${invalidEvents.map((event, index) => `
-                                <tr class="preview-row invalid">
-                                    <td>${event.index || index + 1}</td>
-                                    <td class="error-cell">${event.error || 'Unknown error'}</td>
-                                    <td class="raw-data-cell">
-                                        <pre>${JSON.stringify(event.raw_data || {}, null, 2)}</pre>
-                                    </td>
-                                </tr>
-                            `).join('')}
-                        </tbody>
-                    </table>
-                </div>
-            ` : ''}
+        let html = `
+            <div class="table-responsive">
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>Title</th>
+                            <th>Start</th>
+                            <th>End</th>
+                            <th>Duration</th>
+                            <th>Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
         `;
         
-        modal.style.display = 'block';
-    };
-    
-    // FIXED: Add function to display preview results when no modal is shown
-    const displayPreviewResults = (result) => {
-        const resultsSection = document.getElementById('resultsSection');
-        const resultsTitle = document.getElementById('resultsTitle');
-        const resultsBody = document.getElementById('resultsBody');
+        events.forEach(event => {
+            const duration = Utils.calculateDuration(event.start, event.end);
+            html += `
+                <tr>
+                    <td>${escapeHtml(event.title)}</td>
+                    <td>${Utils.formatDateTime(event.start)}</td>
+                    <td>${Utils.formatDateTime(event.end)}</td>
+                    <td>${duration}</td>
+                    <td>${escapeHtml(event.description || 'N/A')}</td>
+                </tr>
+            `;
+        });
         
-        if (!resultsSection || !resultsTitle || !resultsBody) return;
-        
-        resultsTitle.textContent = 'Preview Results';
-        
-        const cardClass = result.valid ? 'success' : 'warning';
-        const icon = result.valid ? '👁️' : '⚠️';
-        const title = 'File Preview';
-        const summary = result.valid 
-            ? `File contains ${result.event_count || 0} events. Use the preview button to see details.`
-            : `File has issues that need to be resolved before import.`;
-        
-        resultsBody.innerHTML = `
-            <div class="result-card ${cardClass}">
-                <div class="result-header">
-                    <span class="result-icon">${icon}</span>
-                    <h4 class="result-title">${title}</h4>
-                </div>
-                <p class="result-summary">${summary}</p>
-                
-                <div class="result-stats">
-                    <div class="stat-item">
-                        <span class="stat-number">${result.event_count || 0}</span>
-                        <span class="stat-label">Events Found</span>
-                    </div>
-                    <div class="stat-item">
-                        <span class="stat-number">${result.format || 'Unknown'}</span>
-                        <span class="stat-label">File Format</span>
-                    </div>
-                </div>
-                
-                ${result.error ? `
-                    <div class="result-details">
-                        <h5>Issues:</h5>
-                        <div class="detail-item error">${result.error}</div>
-                    </div>
-                ` : ''}
+        html += `
+                    </tbody>
+                </table>
             </div>
         `;
         
-        resultsSection.style.display = 'block';
-        resultsSection.classList.add('slide-up');
+        return html;
     };
     
-    // FIXED: Add function to display preview errors
-    const displayPreviewError = (errorMessage) => {
-        const resultsSection = document.getElementById('resultsSection');
-        const resultsTitle = document.getElementById('resultsTitle');
-        const resultsBody = document.getElementById('resultsBody');
-        
-        if (!resultsSection || !resultsTitle || !resultsBody) return;
-        
-        resultsTitle.textContent = 'Preview Error';
-        
-        resultsBody.innerHTML = `
-            <div class="result-card error">
-                <div class="result-header">
-                    <span class="result-icon">❌</span>
-                    <h4 class="result-title">Preview Failed</h4>
-                </div>
-                <p class="result-summary">An error occurred while generating the preview.</p>
-                <div class="result-details">
-                    <div class="detail-item error">${errorMessage}</div>
-                </div>
-            </div>
-        `;
-        
-        resultsSection.style.display = 'block';
-        resultsSection.classList.add('slide-up');
+    const escapeHtml = (text) => {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
     };
-    
-    const closePreviewModal = () => {
-        const modal = document.getElementById('previewModal');
-        if (modal) {
-            modal.style.display = 'none';
-        }
-    };
-    
-    const proceedWithImport = () => {
-        closePreviewModal();
-        ImportManager.importEvents();
-    };
-    
-    // Make functions global for onclick handlers
-    window.closePreviewModal = closePreviewModal;
-    window.proceedWithImport = proceedWithImport;
     
     return {
-        previewFile,
-        closePreviewModal,
-        proceedWithImport
+        previewFile
     };
 })();
 
-// =============================================================================
-// IMPORT MANAGER
-// =============================================================================
-
 /**
- * Manages the actual import process
+ * Import execution management
  */
 const ImportManager = (() => {
     const importEvents = async () => {
-        const file = FileManager.getSelectedFile();
-        if (!file) {
-            Utils.showNotification('Please select a file first', 'warning');
+        const data = FileManager.getParsedData();
+        if (!data || !data.events.length) {
+            UIManager.showError('No valid data to import. Please validate the file first.');
             return;
         }
-        
-        // Confirm import
-        if (!confirm(`Are you sure you want to import events from "${file.name}"?`)) {
-            return;
-        }
-        
-        const importBtn = document.getElementById('importBtn');
-        UIManager.setButtonLoading(importBtn, true);
         
         try {
-            UIManager.showProgressModal('Importing Events', 'Please wait while we import your events...');
+            UIManager.showLoadingOverlay('Importing events...');
             
-            const result = await ImportAPI.importEvents(file);
+            const response = await APIClient.createEvent({
+                action: 'import_events',
+                events: data.events,
+                format: data.format
+            });
             
-            displayImportResults(result);
+            UIManager.hideLoadingOverlay();
+            ModalManager.closeActive(); // Close preview modal if open
             
-            if (result.imported_count > 0) {
-                Utils.showNotification(
-                    `Successfully imported ${result.imported_count} events!`, 
-                    'success'
-                );
+            if (response.success) {
+                UIManager.showSuccess(`Successfully imported ${response.imported || data.events.length} events!`);
+                resetImportForm();
                 
-                // Clear the form after successful import
+                // Redirect to events page to see imported events
                 setTimeout(() => {
-                    FileManager.clearFile();
-                }, 3000);
+                    window.location.href = 'events.php';
+                }, 2000);
             } else {
-                Utils.showNotification('No events were imported. Please check the results.', 'warning');
+                throw new Error(response.error || 'Import failed');
             }
             
         } catch (error) {
             console.error('Import error:', error);
-            Utils.showNotification(`Import failed: ${error.message}`, 'error');
-            displayImportError(error.message);
-        } finally {
-            UIManager.setButtonLoading(importBtn, false);
-            UIManager.hideProgressModal();
+            UIManager.hideLoadingOverlay();
+            UIManager.showError('Import failed: ' + error.message);
         }
     };
     
-    const displayImportResults = (result) => {
-        const resultsSection = document.getElementById('resultsSection');
-        const resultsTitle = document.getElementById('resultsTitle');
-        const resultsBody = document.getElementById('resultsBody');
-        
-        if (!resultsSection || !resultsTitle || !resultsBody) return;
-        
-        resultsTitle.textContent = 'Import Results';
-        
-        const cardClass = result.imported_count > 0 ? 'success' : 'warning';
-        const icon = result.imported_count > 0 ? '✅' : '⚠️';
-        const title = result.imported_count > 0 ? 'Import Successful' : 'Import Completed with Issues';
-        const summary = result.imported_count > 0 
-            ? `Successfully imported ${result.imported_count} events into the calendar.`
-            : 'Import completed but no events were imported. Check details below.';
-        
-        resultsBody.innerHTML = `
-            <div class="result-card ${cardClass}">
-                <div class="result-header">
-                    <span class="result-icon">${icon}</span>
-                    <h4 class="result-title">${title}</h4>
-                </div>
-                <p class="result-summary">${summary}</p>
-                
-                <div class="result-stats">
-                    <div class="stat-item">
-                        <span class="stat-number">${result.total_events || result.total_processed || 0}</span>
-                        <span class="stat-label">Total Processed</span>
-                    </div>
-                    <div class="stat-item">
-                        <span class="stat-number">${result.imported_count || 0}</span>
-                        <span class="stat-label">Successfully Imported</span>
-                    </div>
-                    <div class="stat-item">
-                        <span class="stat-number">${result.error_count || 0}</span>
-                        <span class="stat-label">Errors</span>
-                    </div>
-                    <div class="stat-item">
-                        <span class="stat-number">${result.skipped_count || 0}</span>
-                        <span class="stat-label">Skipped</span>
-                    </div>
-                </div>
-                
-                ${result.imported_events && result.imported_events.length > 0 ? `
-                    <div class="result-details">
-                        <h5>Successfully Imported Events:</h5>
-                        ${result.imported_events.map(event => `
-                            <div class="detail-item success">
-                                ${event.title} - ${Utils.formatDateTime(event.start_datetime || event.start)}
-                            </div>
-                        `).join('')}
-                    </div>
-                ` : ''}
-                
-                ${result.errors && result.errors.length > 0 ? `
-                    <div class="result-details">
-                        <h5>Import Errors:</h5>
-                        ${result.errors.map(error => `<div class="detail-item error">${typeof error === 'string' ? error : error.error || 'Unknown error'}</div>`).join('')}
-                    </div>
-                ` : ''}
-                
-                ${result.skipped_events && result.skipped_events.length > 0 ? `
-                    <div class="result-details">
-                        <h5>Skipped Events:</h5>
-                        ${result.skipped_events.map(event => `
-                            <div class="detail-item warning">
-                                ${event.title || 'Unnamed Event'} - ${event.reason || 'Unknown reason'}
-                            </div>
-                        `).join('')}
-                    </div>
-                ` : ''}
-            </div>
-        `;
-        
-        resultsSection.style.display = 'block';
-        resultsSection.classList.add('slide-up');
-    };
-    
-    const displayImportError = (errorMessage) => {
-        const resultsSection = document.getElementById('resultsSection');
-        const resultsTitle = document.getElementById('resultsTitle');
-        const resultsBody = document.getElementById('resultsBody');
-        
-        if (!resultsSection || !resultsTitle || !resultsBody) return;
-        
-        resultsTitle.textContent = 'Import Error';
-        
-        resultsBody.innerHTML = `
-            <div class="result-card error">
-                <div class="result-header">
-                    <span class="result-icon">❌</span>
-                    <h4 class="result-title">Import Failed</h4>
-                </div>
-                <p class="result-summary">An error occurred while importing your events.</p>
-                <div class="result-details">
-                    <div class="detail-item error">${errorMessage}</div>
-                </div>
-            </div>
-        `;
-        
-        resultsSection.style.display = 'block';
-        resultsSection.classList.add('slide-up');
+    const resetImportForm = () => {
+        document.getElementById('fileInput').value = '';
+        document.getElementById('fileInfo').style.display = 'none';
+        FileManager.disableButtons(['validateBtn', 'previewBtn', 'importBtn']);
+        FileManager.setParsedData(null);
     };
     
     return {
-        importEvents
+        importEvents,
+        resetImportForm
     };
 })();
 
-// =============================================================================
-// FORMAT EXAMPLES MANAGER
-// =============================================================================
-
 /**
- * Manages the format examples section
+ * Format examples management
  */
 const FormatExamplesManager = (() => {
     const initializeFormatTabs = () => {
         const tabs = document.querySelectorAll('.format-tab');
-        const examples = document.querySelectorAll('.format-example');
+        const contents = document.querySelectorAll('.format-content');
         
         tabs.forEach(tab => {
             tab.addEventListener('click', () => {
                 const format = tab.dataset.format;
-                
-                // Update active tab
-                tabs.forEach(t => t.classList.remove('active'));
-                tab.classList.add('active');
-                
-                // Update active example
-                examples.forEach(ex => ex.classList.remove('active'));
-                const targetExample = document.getElementById(`${format}Example`);
-                if (targetExample) {
-                    targetExample.classList.add('active');
-                }
+                showFormatExample(format, tabs, contents);
             });
         });
+        
+        // Show first tab by default
+        if (tabs.length > 0) {
+            tabs[0].click();
+        }
+    };
+    
+    const showFormatExample = (format, tabs, contents) => {
+        // Update tab states
+        tabs.forEach(t => t.classList.remove('active'));
+        contents.forEach(c => c.classList.remove('active'));
+        
+        // Activate selected tab and content
+        const activeTab = document.querySelector(`[data-format="${format}"]`);
+        const activeContent = document.getElementById(`${format}Example`);
+        
+        if (activeTab) activeTab.classList.add('active');
+        if (activeContent) activeContent.classList.add('active');
     };
     
     return {
@@ -1186,16 +510,12 @@ const FormatExamplesManager = (() => {
     };
 })();
 
-// =============================================================================
-// BUTTON HANDLERS
-// =============================================================================
-
 /**
- * Initialize all button event handlers
+ * Button event handlers
  */
 const ButtonHandlers = (() => {
     const initializeButtons = () => {
-        // Validate button
+        // Validation button
         const validateBtn = document.getElementById('validateBtn');
         validateBtn?.addEventListener('click', ValidationManager.validateFile);
         
@@ -1206,6 +526,10 @@ const ButtonHandlers = (() => {
         // Import button
         const importBtn = document.getElementById('importBtn');
         importBtn?.addEventListener('click', ImportManager.importEvents);
+        
+        // Reset button
+        const resetBtn = document.getElementById('resetBtn');
+        resetBtn?.addEventListener('click', ImportManager.resetImportForm);
     };
     
     return {
@@ -1213,26 +537,18 @@ const ButtonHandlers = (() => {
     };
 })();
 
-// =============================================================================
-// APPLICATION CONTROLLER
-// =============================================================================
-
 /**
- * Main application controller that coordinates all components
+ * Main import application controller
  */
 const ImportApp = (() => {
     const init = async () => {
         console.log('Initializing Import Page...');
         
-        // Add animation styles
-        Utils.addAnimationStyles();
-        
-        // Check authentication first
+        // Check authentication first using modular AuthGuard
         const isAuthenticated = await AuthGuard.checkAuthentication();
         
         if (!isAuthenticated) {
-            // User is not authenticated, AuthGuard will handle redirect
-            return;
+            return; // AuthGuard will handle redirect
         }
         
         // Initialize UI components
@@ -1241,7 +557,7 @@ const ImportApp = (() => {
         ButtonHandlers.initializeButtons();
         
         // Update connection status
-        UIManager.updateConnectionStatus('Ready', 'connected');
+        UIManager.updateConnectionStatus?.('Ready', 'connected');
         
         console.log('Import Page initialized successfully');
     };
@@ -1256,44 +572,15 @@ const ImportApp = (() => {
     };
 })();
 
-// =============================================================================
-// MODAL HELPERS (Global Functions)
-// =============================================================================
-
-// Global functions for modal interactions
-window.closePreviewModal = () => {
-    PreviewManager.closePreviewModal();
-};
-
-window.proceedWithImport = () => {
-    PreviewManager.proceedWithImport();
-};
-
-// Close modals when clicking outside
-window.addEventListener('click', (event) => {
-    if (event.target.classList.contains('modal')) {
-        const modal = event.target;
-        modal.style.display = 'none';
-    }
-});
-
-// Close modals with Escape key
-window.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape') {
-        const modals = document.querySelectorAll('.modal');
-        modals.forEach(modal => {
-            if (modal.style.display === 'block') {
-                modal.style.display = 'none';
-            }
-        });
-    }
-});
+// Make ImportManager available globally for modal buttons
+window.ImportManager = ImportManager;
 
 // =============================================================================
 // APPLICATION INITIALIZATION
 // =============================================================================
 
 document.addEventListener('DOMContentLoaded', () => {
+    console.log('DOM loaded, initializing Import app...');
     ImportApp.init();
 });
 
@@ -1305,7 +592,7 @@ window.addEventListener('beforeunload', () => {
 // Handle browser back/forward navigation
 window.addEventListener('pageshow', (event) => {
     if (event.persisted) {
-        // Page was loaded from cache, check auth status again
+        console.log('Page loaded from cache, checking auth...');
         AuthGuard.checkAuthentication();
     }
 });
