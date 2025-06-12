@@ -245,6 +245,32 @@ const Utils = {
             return text || '';
         }
         return text.substring(0, maxLength) + '...';
+    },
+    
+    formatStatus(status) {
+        const statusMap = {
+            'upcoming': { class: 'upcoming', text: 'Upcoming', icon: '🔮' },
+            'active': { class: 'active', text: 'Active', icon: '🔴' },
+            'completed': { class: 'completed', text: 'Completed', icon: '✅' },
+            'ongoing': { class: 'ongoing', text: 'Ongoing', icon: '🔴' },
+            'past': { class: 'past', text: 'Past', icon: '✅' }
+        };
+        
+        const statusInfo = statusMap[status] || { class: 'unknown', text: 'Unknown', icon: '❓' };
+        return `<span class="status-badge ${statusInfo.class}">${statusInfo.icon} ${statusInfo.text}</span>`;
+    },
+    
+    formatActionsColumn(row) {
+        const currentUser = AuthGuard.getCurrentUser();
+        const canEdit = currentUser && row.owner_id === currentUser.id;
+        
+        let actions = `<button class="btn btn-small btn-outline view-event-btn" data-event-id="${row.id}">👁️ View</button>`;
+        
+        if (canEdit) {
+            actions += ` <button class="btn btn-small btn-primary edit-event-btn" data-event-id="${row.id}">✏️ Edit</button>`;
+        }
+        
+        return `<div class="actions-cell">${actions}</div>`;
     }
 };
 
@@ -377,7 +403,7 @@ const AuthGuard = (() => {
     };
     
     const redirectToLogin = () => {
-        window.location.href = '../login.php';
+        window.location.href = 'login.php';
     };
     
     const getCurrentUser = () => currentUser;
@@ -765,6 +791,8 @@ const EventsDataManager = (() => {
  */
 const DataTablesManager = (() => {
     let dataTable = null;
+    let lastRefreshTime = 0;
+    const REFRESH_THROTTLE_MS = 1000; // Minimum 1 second between refreshes
     
     const initializeDataTable = () => {
         if (dataTable) {
@@ -775,12 +803,95 @@ const DataTablesManager = (() => {
         console.log('Initializing Events DataTable...');
         
         dataTable = $('#eventsTable').DataTable({
+            serverSide: true,
+            processing: true,
+            ajax: {
+                url: Config.apiEndpoints.api,
+                type: 'GET',
+                data: function(d) {
+                    // Add user filter if selected
+                    const selectedUsers = FilterManager.getSelectedUsers();
+                    if (selectedUsers.length > 0) {
+                        d.user_ids = selectedUsers.join(',');
+                    }
+                    d.action = 'events_datatable';
+                },
+                error: function(xhr, error, code) {
+                    console.error('DataTables AJAX error:', {xhr, error, code});
+                    UIManager.showError('Failed to load events data from server');
+                }
+            },
             responsive: true,
             pageLength: 25,
-            lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "All"]],
+            lengthMenu: [[10, 25, 50, 100], [10, 25, 50, 100]],
             order: [[1, 'asc']], // Sort by Start Date (upcoming first)
             dom: '<"top"<"entries-section"l><"search-section"f>>Brt<"bottom"<"info-section"i><"pagination-section"p>>',
             pagingType: 'simple_numbers',
+            columns: [
+                { 
+                    data: 'title',
+                    title: 'Title',
+                    width: '25%'
+                },
+                { 
+                    data: 'start',
+                    title: 'Start Date/Time',
+                    width: '18%',
+                    className: 'text-nowrap',
+                    render: function(data, type, row) {
+                        if (type === 'display') {
+                            return Utils.formatDateTime(data);
+                        }
+                        return data;
+                    }
+                },
+                { 
+                    data: 'end',
+                    title: 'End Date/Time',
+                    width: '18%',
+                    className: 'text-nowrap',
+                    render: function(data, type, row) {
+                        if (type === 'display') {
+                            return Utils.formatDateTime(data);
+                        }
+                        return data;
+                    }
+                },
+                { 
+                    data: 'duration',
+                    title: 'Duration',
+                    width: '12%',
+                    className: 'text-center'
+                },
+                { 
+                    data: 'owner',
+                    title: 'Owner',
+                    width: '15%'
+                },
+                { 
+                    data: 'status',
+                    title: 'Status',
+                    width: '12%',
+                    className: 'text-center',
+                    render: function(data, type, row) {
+                        if (type === 'display') {
+                            return Utils.formatStatus(data);
+                        }
+                        return data;
+                    }
+                },
+                { 
+                    data: null,
+                    title: 'Actions',
+                    orderable: false,
+                    searchable: false,
+                    className: 'text-center',
+                    width: '120px',
+                    render: function(data, type, row) {
+                        return Utils.formatActionsColumn(row);
+                    }
+                }
+            ],
             buttons: [
                 {
                     extend: 'csv',
@@ -819,38 +930,6 @@ const DataTablesManager = (() => {
                     }
                 }
             ],
-            columnDefs: [
-                {
-                    targets: 0, // Title column
-                    width: '25%'
-                },
-                {
-                    targets: [1, 2], // Date columns
-                    width: '18%',
-                    className: 'text-nowrap'
-                },
-                {
-                    targets: 3, // Duration column
-                    width: '12%',
-                    className: 'text-center'
-                },
-                {
-                    targets: 4, // Owner column
-                    width: '15%'
-                },
-                {
-                    targets: 5, // Status column
-                    width: '12%',
-                    className: 'text-center'
-                },
-                {
-                    targets: 6, // Actions column
-                    orderable: false,
-                    searchable: false,
-                    className: 'text-center',
-                    width: '120px'
-                }
-            ],
             language: {
                 search: "Search events:",
                 lengthMenu: "Show _MENU_ events per page",
@@ -863,7 +942,8 @@ const DataTablesManager = (() => {
                     next: "Next",
                     previous: "Previous"
                 },
-                emptyTable: "No events found in the system"
+                emptyTable: "No events found in the system",
+                processing: "Loading events..."
             },
             drawCallback: function() {
                 console.log('Events DataTable redrawn');
@@ -873,128 +953,24 @@ const DataTablesManager = (() => {
         console.log('Events DataTable initialized successfully');
     };
     
-    const loadData = (events) => {
-        if (!dataTable) {
-            console.error('DataTable not initialized');
-            return;
-        }
-        
-        console.log('Loading events data into DataTable:', events);
-        
-        if (!Array.isArray(events)) {
-            console.error('Invalid events data provided to DataTable');
-            return;
-        }
-        
-        // Clear existing data
-        dataTable.clear();
-        
-        // Add new data
-        events.forEach((event, index) => {
-            try {
-                const validatedEvent = Utils.validateEventData(event);
-                const currentUser = AuthGuard.getCurrentUser();
-                
-                const row = [
-                    createTitleCell(validatedEvent.title),
-                    createDateTimeCell(validatedEvent.start),
-                    createDateTimeCell(validatedEvent.end),
-                    createDurationCell(validatedEvent.start, validatedEvent.end),
-                    createOwnerCell(validatedEvent.extendedProps),
-                    createStatusBadge(Utils.getEventStatus(validatedEvent.start, validatedEvent.end)),
-                    createActionsCell(validatedEvent, currentUser)
-                ];
-                
-                dataTable.row.add(row);
-            } catch (error) {
-                console.error(`Error processing event ${index}:`, error, event);
-            }
-        });
-        
-        // Redraw table
-        dataTable.draw();
-        
-        console.log(`Successfully loaded ${events.length} events into DataTable`);
-        
-        // Update summary stats
-        const stats = EventsDataManager.calculateSummaryStats();
-        UIManager.updateEventsSummary(stats);
-    };
-    
-    const createTitleCell = (title) => {
-        const truncated = Utils.truncateText(title, 40);
-        if (truncated !== title) {
-            return `<span title="${title}">${truncated}</span>`;
-        }
-        return title;
-    };
-    
-    const createDateTimeCell = (dateTime) => {
-        if (!dateTime) return 'Not set';
-        
-        const formatted = Utils.formatDateTime(dateTime);
-        const relative = Utils.getRelativeTime(dateTime);
-        
-        return `
-            <div class="datetime-cell">
-                <div class="datetime-main">${Utils.formatDateOnly(dateTime)}</div>
-                <div class="datetime-time">${Utils.formatTimeOnly(dateTime)}</div>
-                <div class="datetime-relative">${relative}</div>
-            </div>
-        `;
-    };
-    
-    const createDurationCell = (start, end) => {
-        return Utils.calculateDuration(start, end);
-    };
-    
-    const createOwnerCell = (extendedProps) => {
-        const userName = extendedProps.userName || 'Unknown';
-        const userColor = extendedProps.userColor || '#3498db';
-        
-        return `
-            <div class="owner-cell">
-                <div class="user-color-indicator" style="background-color: ${userColor}"></div>
-                <span class="user-name">${userName}</span>
-            </div>
-        `;
-    };
-    
-    const createStatusBadge = (status) => {
-        const statusMap = {
-            'upcoming': { class: 'upcoming', text: 'Upcoming', icon: '🔮' },
-            'ongoing': { class: 'ongoing', text: 'Ongoing', icon: '🔴' },
-            'past': { class: 'past', text: 'Past', icon: '✅' },
-            'unknown': { class: 'unknown', text: 'Unknown', icon: '❓' }
-        };
-        
-        const statusInfo = statusMap[status] || statusMap['unknown'];
-        return `<span class="status-badge ${statusInfo.class}">${statusInfo.icon} ${statusInfo.text}</span>`;
-    };
-    
-    const createActionsCell = (event, currentUser) => {
-        const canEdit = currentUser && event.extendedProps.userId === currentUser.id;
-        
-        let actions = `<button class="btn btn-small btn-outline view-event-btn" data-event-id="${event.id}">👁️ View</button>`;
-        
-        if (canEdit) {
-            actions += ` <button class="btn btn-small btn-primary edit-event-btn" data-event-id="${event.id}">✏️ Edit</button>`;
-        }
-        
-        return `<div class="actions-cell">${actions}</div>`;
-    };
-    
     const refreshTable = () => {
-        if (dataTable) {
-            EventBus.emit('events:refresh');
+        if (!dataTable) return;
+        
+        const now = Date.now();
+        if (now - lastRefreshTime < REFRESH_THROTTLE_MS) {
+            console.log('DataTable refresh throttled - too soon since last refresh');
+            return;
         }
+        
+        console.log('Refreshing DataTable...');
+        lastRefreshTime = now;
+        dataTable.ajax.reload(null, false); // false = don't reset paging
     };
     
     const getDataTable = () => dataTable;
     
     return {
         initializeDataTable,
-        loadData,
         refreshTable,
         getDataTable
     };
@@ -1058,7 +1034,8 @@ const FilterManager = (() => {
         const userFilter = document.getElementById('eventUserFilter');
         if (userFilter) {
             userFilter.addEventListener('change', (e) => {
-                EventsDataManager.updateFilters({ user: e.target.value });
+                // For server-side processing, we need to refresh the DataTable
+                DataTablesManager.refreshTable();
             });
         }
     };
@@ -1075,10 +1052,19 @@ const FilterManager = (() => {
         });
     };
     
+    const getSelectedUsers = () => {
+        const userFilter = document.getElementById('eventUserFilter');
+        if (userFilter && userFilter.value) {
+            return [userFilter.value];
+        }
+        return [];
+    };
+    
     return {
         initializeFilters,
         populateUserFilter,
-        resetFilters
+        resetFilters,
+        getSelectedUsers
     };
 })();
 
@@ -1093,19 +1079,27 @@ const EventModalManager = (() => {
     let currentEvent = null;
     let editMode = false;
     
-    const openModal = (eventId, mode = 'view') => {
+    const openModal = async (eventId, mode = 'view') => {
         if (mode === 'create') {
             currentEvent = null;
             editMode = true;
         } else {
-            const event = EventsDataManager.getEventsData().find(e => e.id == eventId);
-            if (!event) {
-                UIManager.showError('Event not found');
+            try {
+                // Fetch event data from server since we're using server-side processing
+                const events = await APIClient.getAllEvents();
+                const event = events.find(e => e.id == eventId);
+                if (!event) {
+                    UIManager.showError('Event not found');
+                    return;
+                }
+                
+                currentEvent = event;
+                editMode = mode === 'edit';
+            } catch (error) {
+                console.error('Error fetching event:', error);
+                UIManager.showError('Failed to load event details');
                 return;
             }
-            
-            currentEvent = event;
-            editMode = mode === 'edit';
         }
         
         const modal = document.getElementById('eventModal');
@@ -1279,7 +1273,7 @@ const EventModalManager = (() => {
             }
             
             closeModal();
-            EventsDataManager.refreshData();
+            DataTablesManager.refreshTable();
             
         } catch (error) {
             console.error('Error saving event:', error);
@@ -1298,7 +1292,7 @@ const EventModalManager = (() => {
             await APIClient.deleteEvent(currentEvent.id);
             EventBus.emit('event:deleted', { message: 'Event deleted successfully' });
             closeModal();
-            EventsDataManager.refreshData();
+            DataTablesManager.refreshTable();
             
         } catch (error) {
             console.error('Error deleting event:', error);
@@ -1362,6 +1356,8 @@ const SSEManager = (() => {
     let lastEventId = 0;
     let reconnectAttempts = 0;
     let isConnected = false;
+    let refreshTimeout = null;
+    const REFRESH_DEBOUNCE_MS = 500; // Wait 500ms after last SSE event before refreshing
     
     const connect = () => {
         if (eventSource) {
@@ -1416,9 +1412,24 @@ const SSEManager = (() => {
             }
         };
         
+        // Only set up event listeners on new EventSource
         setupEventListeners();
     };
     
+    const debouncedRefresh = () => {
+        // Clear any existing timeout
+        if (refreshTimeout) {
+            clearTimeout(refreshTimeout);
+        }
+        
+        // Set a new timeout to refresh after debounce period
+        refreshTimeout = setTimeout(() => {
+            console.log('SSE: Debounced refresh triggered');
+            EventBus.emit('events:refresh');
+            refreshTimeout = null;
+        }, REFRESH_DEBOUNCE_MS);
+    };
+
     const setupEventListeners = () => {
         // Handle event changes
         ['create', 'update', 'delete'].forEach(eventType => {
@@ -1427,8 +1438,8 @@ const SSEManager = (() => {
                     const eventData = JSON.parse(e.data);
                     console.log(`SSE: Event ${eventType}`, eventData);
                     
-                    // Refresh events data to get latest
-                    EventBus.emit('events:refresh');
+                    // Use debounced refresh to batch multiple rapid events
+                    debouncedRefresh();
                     
                     lastEventId = parseInt(e.lastEventId) || lastEventId;
                 } catch (error) {
@@ -1454,6 +1465,12 @@ const SSEManager = (() => {
     };
     
     const disconnect = () => {
+        // Clear any pending refresh timeout
+        if (refreshTimeout) {
+            clearTimeout(refreshTimeout);
+            refreshTimeout = null;
+        }
+        
         if (eventSource) {
             eventSource.close();
             eventSource = null;
@@ -1476,29 +1493,38 @@ const SSEManager = (() => {
  */
 const EventsApp = (() => {
     const setupEventListeners = () => {
-        // Refresh button
+        // Refresh button with debounce
         const refreshBtn = document.getElementById('refreshEventsBtn');
+        let refreshing = false;
+        
         refreshBtn?.addEventListener('click', async () => {
+            if (refreshing) return; // Prevent double-clicks
+            
             try {
+                refreshing = true;
                 console.log('Manual refresh triggered');
-                const events = await EventsDataManager.refreshData();
-                DataTablesManager.loadData(EventsDataManager.getFilteredEvents());
+                DataTablesManager.refreshTable();
                 
                 // Show success feedback
                 const originalText = refreshBtn.textContent;
                 refreshBtn.textContent = '✓ Refreshed';
                 refreshBtn.style.background = '#48bb78';
                 refreshBtn.style.color = 'white';
+                refreshBtn.disabled = true;
                 
                 setTimeout(() => {
                     refreshBtn.textContent = originalText;
                     refreshBtn.style.background = '';
                     refreshBtn.style.color = '';
+                    refreshBtn.disabled = false;
+                    refreshing = false;
                 }, 2000);
                 
             } catch (error) {
                 console.error('Error refreshing data:', error);
                 UIManager.showError('Failed to refresh data. Please try again.');
+                refreshing = false;
+                refreshBtn.disabled = false;
             }
         });
         
@@ -1519,26 +1545,10 @@ const EventsApp = (() => {
             EventModalManager.openModal(eventId, 'edit');
         });
         
-        // Event listeners
-        EventBus.on('events:loaded', ({ events }) => {
-            console.log('Event: events:loaded', events);
-            DataTablesManager.loadData(EventsDataManager.getFilteredEvents());
-        });
-        
-        EventBus.on('events:filtered', ({ events }) => {
-            console.log('Event: events:filtered', events);
-            DataTablesManager.loadData(events);
-        });
-        
-        EventBus.on('events:refresh', async () => {
-            try {
-                console.log('Event: events:refresh triggered');
-                const events = await EventsDataManager.refreshData();
-                DataTablesManager.loadData(EventsDataManager.getFilteredEvents());
-            } catch (error) {
-                console.error('Error refreshing events:', error);
-                UIManager.showError('Failed to refresh events data');
-            }
+        // Event listeners for server-side processing
+        EventBus.on('events:refresh', () => {
+            console.log('Event: events:refresh triggered');
+            DataTablesManager.refreshTable();
         });
     };
     
@@ -1559,18 +1569,9 @@ const EventsApp = (() => {
         EventModalManager.setupEventListeners();
         setupEventListeners();
         
-        // Load initial data
-        try {
-            console.log('Loading initial events data...');
-            const events = await EventsDataManager.loadEventsData();
-            DataTablesManager.loadData(EventsDataManager.getFilteredEvents());
-            console.log('Initial data loaded successfully');
-        } catch (error) {
-            console.error('Error loading initial data:', error);
-            UIManager.showError('Failed to load events data. Please refresh the page or contact support.');
-        }
+        // Server-side processing: DataTable will automatically load data via AJAX
         
-        // Start SSE connection
+        // Start SSE connection (fixed infinite loop issue)
         SSEManager.connect();
         
         console.log('Events Management Page initialized successfully');

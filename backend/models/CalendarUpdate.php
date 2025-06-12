@@ -297,12 +297,34 @@ class CalendarUpdate {
             return ($currentTime - $broadcast['timestamp']) < 5;
         });
         
-        // Check for duplicates
+        // Check for duplicates in memory
         foreach ($this->recentBroadcasts as $broadcast) {
             if ($broadcast['type'] === $eventType && 
                 isset($eventData['id']) && isset($broadcast['data']['id']) && 
                 $eventData['id'] === $broadcast['data']['id']) {
                 return true;
+            }
+        }
+        
+        // Also check for recent duplicates in database (last 10 seconds)
+        if (isset($eventData['id'])) {
+            try {
+                $stmt = $this->pdo->prepare("
+                    SELECT COUNT(*) FROM event_updates 
+                    WHERE event_type = ? 
+                    AND JSON_EXTRACT(event_data, '$.id') = ? 
+                    AND created_at > DATE_SUB(NOW(), INTERVAL 10 SECOND)
+                ");
+                $stmt->execute([$eventType, $eventData['id']]);
+                $recentCount = $stmt->fetchColumn();
+                
+                if ($recentCount > 0) {
+                    error_log("Preventing database duplicate: {$eventType} for event ID {$eventData['id']} (found {$recentCount} recent records)");
+                    return true;
+                }
+            } catch (Exception $e) {
+                error_log("Error checking database duplicates: " . $e->getMessage());
+                // Continue with broadcast if database check fails
             }
         }
         

@@ -76,9 +76,9 @@ while (time() - $startTime < $maxExecutionTime) {
         // Clean up old updates periodically to prevent table bloat
         if (rand(1, 100) === 1) { // 1% chance to clean up on each iteration
             try {
-                $deleteStmt = $pdo->prepare("DELETE FROM event_updates WHERE id < (SELECT * FROM (SELECT id FROM event_updates ORDER BY id DESC LIMIT 1 OFFSET 100) AS temp)");
-                $deleteStmt->execute();
-                $deletedCount = $deleteStmt->rowCount();
+                // Use the CalendarUpdate model's cleanup method instead of raw SQL
+                global $calendarUpdate;
+                $deletedCount = $calendarUpdate->cleanupOldUpdates(1, 100); // Keep only last 100 records, delete older than 1 hour
                 if ($deletedCount > 0) {
                     logSSEEvent("Cleaned up $deletedCount old update records");
                 }

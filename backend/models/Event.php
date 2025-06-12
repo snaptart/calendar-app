@@ -600,6 +600,180 @@ class Event {
     }
     
     /**
+     * Get events for DataTables server-side processing
+     * 
+     * @param int $start Starting record number for pagination
+     * @param int $length Number of records to return
+     * @param string $searchValue Search term for filtering
+     * @param string $orderBy Column to order by
+     * @param string $orderDir Order direction (asc/desc)
+     * @param array $userIds Optional array of user IDs to filter by
+     * @return array DataTables-formatted response with total, filtered counts and data
+     */
+    public function getEventsForDataTable($start, $length, $searchValue = '', $orderBy = 'episode_Start_Date_Time', $orderDir = 'asc', $userIds = null) {
+        try {
+            // Base query for selecting events
+            $baseSelect = "
+                SELECT e.episode_ID, e.episode_Title, e.episode_Start_Date_Time, 
+                       e.episode_End_Date_Time, e.episode_Color, e.user_ID,
+                       u.user_Name as user_name,
+                       TIMESTAMPDIFF(MINUTE, e.episode_Start_Date_Time, e.episode_End_Date_Time) as duration_minutes
+                FROM episode e 
+                JOIN user u ON e.user_ID = u.user_ID 
+                WHERE u.user_Status = 'Active'
+            ";
+            
+            $countSelect = "
+                SELECT COUNT(*) as total
+                FROM episode e 
+                JOIN user u ON e.user_ID = u.user_ID 
+                WHERE u.user_Status = 'Active'
+            ";
+            
+            $params = [];
+            $whereConditions = [];
+            
+            // Add user filter if provided
+            if ($userIds && !empty($userIds)) {
+                $userIds = array_filter($userIds, 'is_numeric');
+                if (!empty($userIds)) {
+                    $placeholders = str_repeat('?,', count($userIds) - 1) . '?';
+                    $whereConditions[] = "e.user_ID IN ($placeholders)";
+                    $params = array_merge($params, $userIds);
+                }
+            }
+            
+            // Add search filter if provided
+            if (!empty($searchValue)) {
+                $whereConditions[] = "(e.episode_Title LIKE ? OR u.user_Name LIKE ?)";
+                $searchParam = "%{$searchValue}%";
+                $params[] = $searchParam;
+                $params[] = $searchParam;
+            }
+            
+            // Combine where conditions
+            $whereClause = '';
+            if (!empty($whereConditions)) {
+                $whereClause = ' AND ' . implode(' AND ', $whereConditions);
+            }
+            
+            // Get total count (without search filter)
+            $totalCountParams = [];
+            if ($userIds && !empty($userIds)) {
+                $totalCountParams = $userIds;
+            }
+            
+            $totalSql = $countSelect;
+            if ($userIds && !empty($userIds)) {
+                $userIds = array_filter($userIds, 'is_numeric');
+                if (!empty($userIds)) {
+                    $placeholders = str_repeat('?,', count($userIds) - 1) . '?';
+                    $totalSql .= " AND e.user_ID IN ($placeholders)";
+                }
+            }
+            
+            $totalStmt = $this->pdo->prepare($totalSql);
+            $totalStmt->execute($totalCountParams);
+            $totalRecords = $totalStmt->fetch()['total'];
+            
+            // Get filtered count (with search filter)
+            $filteredStmt = $this->pdo->prepare($countSelect . $whereClause);
+            $filteredStmt->execute($params);
+            $filteredRecords = $filteredStmt->fetch()['total'];
+            
+            // Map column names for ordering
+            $validOrderColumns = [
+                'episode_Title' => 'e.episode_Title',
+                'episode_Start_Date_Time' => 'e.episode_Start_Date_Time', 
+                'episode_End_Date_Time' => 'e.episode_End_Date_Time',
+                'duration_minutes' => 'duration_minutes',
+                'user_name' => 'u.user_Name'
+            ];
+            
+            $orderColumn = $validOrderColumns[$orderBy] ?? 'e.episode_Start_Date_Time';
+            $orderDirection = strtoupper($orderDir) === 'DESC' ? 'DESC' : 'ASC';
+            
+            // Get the actual data with pagination
+            // Use direct interpolation for LIMIT since values are validated as integers
+            $startInt = (int)$start;
+            $lengthInt = (int)$length;
+            $dataSQL = $baseSelect . $whereClause . " ORDER BY {$orderColumn} {$orderDirection} LIMIT {$startInt}, {$lengthInt}";
+            
+            $dataStmt = $this->pdo->prepare($dataSQL);
+            $dataStmt->execute($params);
+            $events = $dataStmt->fetchAll();
+            
+            // Format the data for DataTables
+            $formattedData = [];
+            foreach ($events as $event) {
+                $formattedData[] = [
+                    'id' => (int)$event['episode_ID'],
+                    'title' => $event['episode_Title'],
+                    'start' => $event['episode_Start_Date_Time'],
+                    'end' => $event['episode_End_Date_Time'],
+                    'duration' => $this->formatDuration($event['duration_minutes']),
+                    'owner' => $event['user_name'],
+                    'owner_id' => (int)$event['user_ID'],
+                    'color' => $event['episode_Color'] ?? '#3498db',
+                    'status' => $this->getEventStatus($event['episode_Start_Date_Time'], $event['episode_End_Date_Time'])
+                ];
+            }
+            
+            return [
+                'total' => (int)$totalRecords,
+                'filtered' => (int)$filteredRecords,
+                'data' => $formattedData
+            ];
+            
+        } catch (PDOException $e) {
+            error_log("Error fetching events for DataTable: " . $e->getMessage());
+            throw new Exception("Failed to fetch events for table");
+        }
+    }
+    
+    /**
+     * Format duration in minutes to human readable format
+     * 
+     * @param int $minutes Duration in minutes
+     * @return string Formatted duration
+     */
+    private function formatDuration($minutes) {
+        if ($minutes < 60) {
+            return $minutes . 'm';
+        }
+        
+        $hours = floor($minutes / 60);
+        $remainingMinutes = $minutes % 60;
+        
+        if ($remainingMinutes === 0) {
+            return $hours . 'h';
+        }
+        
+        return $hours . 'h ' . $remainingMinutes . 'm';
+    }
+    
+    /**
+     * Get event status based on dates
+     * 
+     * @param string $startDateTime Start date and time
+     * @param string $endDateTime End date and time
+     * @return string Event status
+     */
+    private function getEventStatus($startDateTime, $endDateTime) {
+        $now = new DateTime();
+        $start = new DateTime($startDateTime);
+        $end = new DateTime($endDateTime);
+        
+        if ($now < $start) {
+            return 'upcoming';
+        } elseif ($now >= $start && $now <= $end) {
+            return 'active';
+        } else {
+            return 'completed';
+        }
+    }
+
+    /**
      * Get default facility ID
      */
     private function getDefaultFacilityId() {

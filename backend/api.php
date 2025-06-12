@@ -346,6 +346,60 @@ function handleGetRequest($auth, $userModel, $eventModel, $calendarUpdate) {
             sendResponse($events);
             break;
             
+        case 'events_datatable':
+            $auth->requireAuth();
+            
+            // Get DataTables parameters
+            $draw = intval($_GET['draw'] ?? 1);
+            $start = intval($_GET['start'] ?? 0);
+            $length = intval($_GET['length'] ?? 25);
+            $searchValue = isset($_GET['search']['value']) ? $_GET['search']['value'] : '';
+            
+            // Get ordering parameters
+            $orderColumn = isset($_GET['order'][0]['column']) ? intval($_GET['order'][0]['column']) : 1;
+            $orderDir = isset($_GET['order'][0]['dir']) ? $_GET['order'][0]['dir'] : 'asc';
+            
+            // Map column numbers to database fields
+            $columns = ['episode_Title', 'episode_Start_Date_Time', 'episode_End_Date_Time', 'duration_minutes', 'user_name'];
+            $orderBy = $columns[$orderColumn] ?? 'episode_Start_Date_Time';
+            
+            // Get user filter if provided
+            $userIds = $_GET['user_ids'] ?? '';
+            $userIdsArray = null;
+            
+            if ($userIds) {
+                $userIdsArray = array_filter(explode(',', $userIds), 'is_numeric');
+                if (empty($userIdsArray)) {
+                    sendResponse([
+                        'draw' => $draw,
+                        'recordsTotal' => 0,
+                        'recordsFiltered' => 0,
+                        'data' => []
+                    ]);
+                    return;
+                }
+            }
+            
+            // Get paginated events data
+            $result = $eventModel->getEventsForDataTable($start, $length, $searchValue, $orderBy, $orderDir, $userIdsArray);
+            
+            // Log for debugging
+            error_log("DataTables response: " . json_encode([
+                'draw' => $draw,
+                'recordsTotal' => $result['total'],
+                'recordsFiltered' => $result['filtered'],
+                'data_count' => count($result['data']),
+                'first_row' => isset($result['data'][0]) ? $result['data'][0] : null
+            ]));
+            
+            sendResponse([
+                'draw' => $draw,
+                'recordsTotal' => $result['total'],
+                'recordsFiltered' => $result['filtered'],
+                'data' => $result['data']
+            ]);
+            break;
+            
         case 'events_by_user':
             $auth->requireAuth();
             
