@@ -19,6 +19,9 @@ $dependencies = isset($pageController) ? $pageController->getDependencies() : []
     <!-- jQuery (base requirement) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
     
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
     <?php 
     // Load external dependencies CSS
     if (isset($config['requires'])) {

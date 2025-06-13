@@ -9,23 +9,25 @@
         <!-- User checkboxes will be populated dynamically by JavaScript -->
         <div class="loading-message">Loading users...</div>
     </div>
-    <button id="refreshUsers" class="btn btn-small btn-outline">🔄 Refresh Users</button>
+    <button id="refreshUsers" class="btn btn-small btn-outline">
+        <i data-lucide="refresh-cw"></i> Refresh Users
+    </button>
 </div>
 
 <div class="calendar-actions">
     <button id="addEventBtn" class="btn btn-primary">
-        <span class="btn-icon">+</span>
+        <i data-lucide="plus"></i>
         Add Event
     </button>
     <button id="viewEventsBtn" class="btn btn-outline" onclick="window.location.href='index.php?page=events'">
-        <span class="btn-icon">📋</span>
+        <i data-lucide="list-checks"></i>
         View All Events
     </button>
     <button id="importEventsBtn" class="btn btn-outline" onclick="window.location.href='index.php?page=import'">
-        <span class="btn-icon">📥</span>
+        <i data-lucide="download"></i>
         Import Events
     </button>
     <div class="connection-status">
-        <span id="connectionStatus" class="status">Initializing...</span>
+        <span id="connectionStatus" class="status disconnected">Connecting...</span>
     </div>
 </div>

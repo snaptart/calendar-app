@@ -5,10 +5,10 @@ $page = $page ?? 'calendar';
 
 // Navigation menu configuration
 $navItems = [
-    'calendar' => ['icon' => '📅', 'label' => 'Calendar'],
-    'events' => ['icon' => '📋', 'label' => 'Events'],
-    'users' => ['icon' => '👥', 'label' => 'Users'],
-    'import' => ['icon' => '📥', 'label' => 'Import']
+    'calendar' => ['icon' => 'calendar', 'label' => 'Calendar'],
+    'events' => ['icon' => 'list-checks', 'label' => 'Events'],
+    'users' => ['icon' => 'users', 'label' => 'Users'],
+    'import' => ['icon' => 'download', 'label' => 'Import']
 ];
 ?>
 
@@ -16,7 +16,7 @@ $navItems = [
     <div class="header-content">
         <div class="header-left">
             <h1>
-                📅 <?php echo htmlspecialchars($currentUser['name'] ?? 'User'); ?>'s Calendar
+                <i data-lucide="chart-area"></i> <?php echo htmlspecialchars($currentUser['name'] ?? 'User'); ?>'s Calendar
             </h1>
             <nav class="main-navigation">
                 <?php foreach ($navItems as $navPage => $navConfig): ?>
@@ -31,7 +31,7 @@ $navItems = [
                     ?>
                     <a href="<?php echo $href; ?>" 
                        class="nav-link <?php echo UrlHelper::isActive('/' . $navPage) || ($navPage === 'calendar' && UrlHelper::isActive('/', true)) ? 'active' : ''; ?>">
-                        <?php echo $navConfig['icon']; ?> <?php echo $navConfig['label']; ?>
+                        <i data-lucide="<?php echo $navConfig['icon']; ?>"></i> <?php echo $navConfig['label']; ?>
                     </a>
                 <?php endforeach; ?>
             </nav>
@@ -84,4 +84,11 @@ async function handleLogout() {
         window.location.href = 'frontend/pages/login.php';
     });
 }
+
+// Initialize Lucide icons
+document.addEventListener('DOMContentLoaded', function() {
+    if (typeof lucide !== 'undefined') {
+        lucide.createIcons();
+    }
+});
 </script>

@@ -100,22 +100,7 @@ export const UserManager = (() => {
     // Event listeners
     EventBus.on('app:init', loadUsers);
     EventBus.on('auth:authenticated', ({ user }) => {
-        // Update user status display
-        const userNameInput = document.getElementById('userName');
-        if (userNameInput) {
-            userNameInput.value = user.name;
-            userNameInput.disabled = true; // User is now authenticated
-        }
-        
-        // Update the header h1 title to show user's name
-        const titleElement = document.querySelector('header h1');
-        if (titleElement) {
-            titleElement.innerHTML = `📅 ${user.name}'s Calendar`;
-        }
-        
-        // Also update the page title
-        document.title = `${user.name}'s Calendar`;
-        
+        // User name is already set server-side in header.php - no need to update
         EventBus.emit('user:set', { user });
     });
     

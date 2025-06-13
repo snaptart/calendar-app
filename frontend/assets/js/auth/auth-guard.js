@@ -10,30 +10,17 @@ export const AuthGuard = (() => {
     let currentUser = null;
     
     const checkAuthentication = async () => {
-        // Check if currentUser is already set by PHP
+        // PHP already validates authentication server-side
+        // If we're here, user is authenticated - just use the server-provided data
         if (window.currentUser) {
             currentUser = window.currentUser;
             EventBus.emit('auth:authenticated', { user: currentUser });
             return true;
         }
         
-        // Fallback to API check
-        try {
-            const response = await APIClient.checkAuth();
-            
-            if (response.authenticated) {
-                currentUser = response.user;
-                EventBus.emit('auth:authenticated', { user: response.user });
-                return true;
-            } else {
-                redirectToLogin();
-                return false;
-            }
-        } catch (error) {
-            console.error('Authentication check failed:', error);
-            redirectToLogin();
-            return false;
-        }
+        // If no user data provided by PHP, user is not authenticated
+        redirectToLogin();
+        return false;
     };
     
     const redirectToLogin = () => {

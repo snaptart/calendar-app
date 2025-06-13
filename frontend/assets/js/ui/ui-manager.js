@@ -92,17 +92,8 @@ export const UIManager = (() => {
     };
     
     const setupAuthenticatedUI = (user) => {
-        // Update header to show authenticated user
-        const userNameInput = document.getElementById('userName');
-        if (userNameInput) {
-            userNameInput.value = user.name;
-            userNameInput.disabled = true;
-            userNameInput.style.backgroundColor = '#f7fafc';
-            userNameInput.style.color = '#2d3748';
-        }
-        
-        // Add logout button
-        addLogoutButton();
+        // User name input is already set server-side in header.php - no need to update
+        // Logout button is already rendered server-side in header.php - no need to add
         
         updateUserStatus(`Logged in as: ${user.name}`, 'user-set');
     };

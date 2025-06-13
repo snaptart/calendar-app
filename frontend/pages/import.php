@@ -7,7 +7,7 @@
     <h2>Import Events</h2>
     <div class="header-actions">
         <button class="btn btn-outline" onclick="window.location.href='index.php'">
-            <span class="btn-icon">📅</span>
+            <i data-lucide="calendar"></i>
             Back to Calendar
         </button>
     </div>
@@ -22,7 +22,9 @@
         
         <form id="importForm" enctype="multipart/form-data">
             <div class="file-upload-area" id="fileUploadArea">
-                <div class="upload-icon">📁</div>
+                <div class="upload-icon">
+                    <i data-lucide="folder-open" style="width: 48px; height: 48px;"></i>
+                </div>
                 <p>Drag and drop your file here or click to browse</p>
                 <input type="file" id="fileInput" accept=".json,.csv,.ics,.ical" style="display: none;">
                 <button type="button" class="btn btn-primary" onclick="document.getElementById('fileInput').click()">

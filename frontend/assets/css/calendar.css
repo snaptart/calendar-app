@@ -7,11 +7,13 @@
     border: 0px solid #e2e8f0;
     overflow: hidden;
     height: 100%;
+    display: flex;
+    flex-direction: column;
 }
 
 #calendar {
-    height: calc(100% - 48px);
-    padding: 24px;
+    flex: 1;
+    padding: 24px 0px;
 }
 
 /* FullCalendar Customizations */
@@ -20,6 +22,8 @@
 }
 
 .fc-toolbar {
+    margin-left: 24px !important;
+    margin-right: 24px !important;
     margin-bottom: 24px !important;
     gap: 16px !important;
 }
@@ -32,40 +36,45 @@
 }
 
 .fc-button-group {
-    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05) !important;
-    border-radius: 8px !important;
-    overflow: hidden !important;
+    box-shadow: none !important;
+    border-radius: 0px !important;
+    overflow: visible !important;
 }
 
 .fc-button-primary {
-    background: #4299e1 !important;
-    border-color: #4299e1 !important;
-    color: white !important;
+    background: #f8fafc !important;
+    border: 1px solid #e2e8f0 !important;
+    color: #4a5568 !important;
     font-weight: 500 !important;
     font-size: 0.875rem !important;
     padding: 8px 16px !important;
     font-family: inherit !important;
+    margin-right: 8px !important;
 }
 
 .fc-button-primary:hover {
-    background: #3182ce !important;
-    border-color: #3182ce !important;
+    background: #edf2f7 !important;
+    border-color: #cbd5e0 !important;
+    color: #2d3748 !important;
 }
 
 .fc-button-primary:disabled {
-    background: #a0aec0 !important;
-    border-color: #a0aec0 !important;
+    background: #f8fafc !important;
+    border-color: #e2e8f0 !important;
+    color: #a0aec0 !important;
 }
 
-.fc-button-primary:not(:disabled):active {
-    background: #2c5aa0 !important;
-    border-color: #2c5aa0 !important;
+.fc-button-primary:not(:disabled):active,
+.fc-button-primary.fc-button-active {
+    background: #e2e8f0 !important;
+    border-color: #cbd5e0 !important;
+    color: #2d3748 !important;
 }
 
 /* Calendar Grid */
 .fc-theme-standard .fc-scrollgrid {
     border: 1px solid #e2e8f0 !important;
-    border-radius: 8px !important;
+    border-radius: 0px !important;
     overflow: hidden !important;
 }
 
