@@ -7,7 +7,7 @@
  */
 
 // Import shared utilities
-import { Config } from './core/config.js';
+import { Config, getBaseUrl } from './core/config.js';
 import { Utils } from './core/utils.js';
 
 // =============================================================================
@@ -149,7 +149,7 @@ const AuthManager = {
             
             if (response.success) {
                 // Successful login - redirect to main application
-                window.location.href = response.redirect || 'index.php';
+                window.location.href = response.redirect || getBaseUrl() + '/';
                 return true;
             } else {
                 throw new Error(response.error || 'Login failed');

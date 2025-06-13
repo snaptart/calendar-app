@@ -11,8 +11,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     
     <!-- Application Styles -->
-    <link rel="stylesheet" href="frontend/assets/css/style.css">
-    <link rel="stylesheet" href="frontend/assets/css/login.css">
+    <link rel="stylesheet" href="../assets/css/style.css">
+    <link rel="stylesheet" href="../assets/css/login.css">
 </head>
 <body class="auth-page">
     <div class="auth-container">
@@ -78,6 +78,6 @@
     </div>
     
     <!-- Application JavaScript -->
-    <script type="module" src="frontend/assets/js/auth.js"></script>
+    <script type="module" src="../assets/js/auth.js"></script>
 </body>
 </html>

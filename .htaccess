@@ -1,9 +1,28 @@
 RewriteEngine On
 
-# Redirect requests to index.php with page parameter
+# Pretty URL routing - redirect to index.php with page parameter
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
-RewriteRule ^(events|users|import)/?$ index.php?page=$1 [L,QSA]
+RewriteCond %{REQUEST_URI} !^/backend/
+RewriteCond %{REQUEST_URI} !^/frontend/
 
-# Optional: Redirect calendar to index.php (for consistency)
-RewriteRule ^calendar/?$ index.php [L,QSA]
+# Main pages
+RewriteRule ^(calendar|events|users|import)/?$ index.php?page=$1 [L,QSA]
+
+# User-specific routes
+RewriteRule ^users/([0-9]+)/?$ index.php?page=users&user_id=$1 [L,QSA]
+RewriteRule ^users/([0-9]+)/events/?$ index.php?page=events&user_id=$1 [L,QSA]
+
+# Event-specific routes
+RewriteRule ^events/([0-9]+)/?$ index.php?page=events&event_id=$1 [L,QSA]
+RewriteRule ^events/([0-9]+)/edit/?$ index.php?page=events&event_id=$1&action=edit [L,QSA]
+
+# Date-based routes
+RewriteRule ^calendar/([0-9]{4})/([0-9]{1,2})/?$ index.php?page=calendar&year=$1&month=$2 [L,QSA]
+RewriteRule ^calendar/([0-9]{4})/([0-9]{1,2})/([0-9]{1,2})/?$ index.php?page=calendar&year=$1&month=$2&day=$3 [L,QSA]
+
+# API routes (should go to backend/api.php)
+RewriteRule ^api/(.*)$ backend/api.php [L,QSA]
+
+# Default calendar route
+RewriteRule ^/?$ index.php?page=calendar [L,QSA]

@@ -9,6 +9,9 @@ class PageController {
         $this->pageConfig = require_once 'frontend/config/pages.php';
         $this->dependencies = require_once 'frontend/config/dependencies.php';
         $this->currentUser = $currentUser;
+        
+        // Load URL helper
+        require_once 'frontend/helpers/UrlHelper.php';
     }
     
     public function handleRequest() {
@@ -21,6 +24,17 @@ class PageController {
     private function getRequestedPage() {
         $page = isset($_GET['page']) ? $_GET['page'] : 'calendar';
         return isset($this->pageConfig[$page]) ? $page : 'calendar';
+    }
+    
+    public function getUrlParameters() {
+        return [
+            'user_id' => isset($_GET['user_id']) ? (int)$_GET['user_id'] : null,
+            'event_id' => isset($_GET['event_id']) ? (int)$_GET['event_id'] : null,
+            'action' => isset($_GET['action']) ? $_GET['action'] : null,
+            'year' => isset($_GET['year']) ? (int)$_GET['year'] : null,
+            'month' => isset($_GET['month']) ? (int)$_GET['month'] : null,
+            'day' => isset($_GET['day']) ? (int)$_GET['day'] : null
+        ];
     }
     
     private function renderPage($page, $config) {
@@ -74,6 +88,7 @@ class PageController {
         <script>
             window.currentUser = <?php echo json_encode($this->currentUser); ?>;
             window.currentPage = '<?php echo isset($_GET['page']) ? $_GET['page'] : 'calendar'; ?>';
+            window.urlParameters = <?php echo json_encode($this->getUrlParameters()); ?>;
         </script>
         
         <?php

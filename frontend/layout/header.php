@@ -20,8 +20,17 @@ $navItems = [
             </h1>
             <nav class="main-navigation">
                 <?php foreach ($navItems as $navPage => $navConfig): ?>
-                    <a href="<?php echo $navPage === 'calendar' ? 'index.php' : 'index.php?page=' . $navPage; ?>" 
-                       class="nav-link <?php echo $page === $navPage ? 'active' : ''; ?>">
+                    <?php
+                    $href = match($navPage) {
+                        'calendar' => UrlHelper::calendar(),
+                        'events' => UrlHelper::events(),
+                        'users' => UrlHelper::users(),
+                        'import' => UrlHelper::import(),
+                        default => UrlHelper::base('/' . $navPage)
+                    };
+                    ?>
+                    <a href="<?php echo $href; ?>" 
+                       class="nav-link <?php echo UrlHelper::isActive('/' . $navPage) || ($navPage === 'calendar' && UrlHelper::isActive('/', true)) ? 'active' : ''; ?>">
                         <?php echo $navConfig['icon']; ?> <?php echo $navConfig['label']; ?>
                     </a>
                 <?php endforeach; ?>
@@ -68,11 +77,11 @@ async function handleLogout() {
         body: JSON.stringify({ action: 'logout' })
     })
     .then(() => {
-        window.location.href = 'login.php';
+        window.location.href = 'frontend/pages/login.php';
     })
     .catch(error => {
         console.error('Logout error:', error);
-        window.location.href = 'login.php';
+        window.location.href = 'frontend/pages/login.php';
     });
 }
 </script>
