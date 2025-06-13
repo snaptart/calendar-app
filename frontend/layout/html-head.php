@@ -33,12 +33,12 @@ $dependencies = isset($pageController) ? $pageController->getDependencies() : []
     ?>
     
     <!-- Application Styles -->
-    <link rel="stylesheet" href="frontend/css/style.css">
+    <link rel="stylesheet" href="frontend/assets/css/style.css">
     <?php 
     // Load page-specific styles
     if (isset($config['styles'])) {
         foreach ($config['styles'] as $style) {
-            echo "<link rel=\"stylesheet\" href=\"frontend/css/{$style}\">\n    ";
+            echo "<link rel=\"stylesheet\" href=\"frontend/assets/css/{$style}\">\n    ";
         }
     }
     ?>
