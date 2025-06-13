@@ -7,7 +7,8 @@
       "Bash(cp:*)",
       "Bash(mv:*)",
       "Bash(mkdir:*)",
-      "Bash(rm:*)"
+      "Bash(rm:*)",
+      "Bash(php:*)"
     ],
     "deny": []
   }
