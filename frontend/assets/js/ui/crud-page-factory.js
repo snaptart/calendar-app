@@ -358,7 +358,7 @@ export const CrudPageFactory = (() => {
                     
                     // Load initial data
                     await DataManager.loadData();
-                    DataTablesManager.refreshTable();
+                    // Table refresh is handled by the events:loaded listener
                     
                     // Initialize SSE for real-time updates
                     SSEManager.connect();
@@ -416,7 +416,49 @@ export const CrudPageFactory = (() => {
                     DataTablesManager.refreshTable();
                 });
                 
-                // Listen for SSE events if configured
+                // Listen for specific SSE events based on entity type
+                if (entityType === 'events') {
+                    // Listen for event-specific SSE events
+                    EventBus.on('sse:eventCreate', (data) => {
+                        console.log('SSE: Event created, refreshing table');
+                        if (customHandlers.onSSEMessage) {
+                            customHandlers.onSSEMessage(data);
+                        }
+                        DataManager.refreshData().then(() => {
+                            DataTablesManager.refreshTable();
+                        });
+                    });
+                    
+                    EventBus.on('sse:eventUpdate', (data) => {
+                        console.log('SSE: Event updated, refreshing table');
+                        if (customHandlers.onSSEMessage) {
+                            customHandlers.onSSEMessage(data);
+                        }
+                        DataManager.refreshData().then(() => {
+                            DataTablesManager.refreshTable();
+                        });
+                    });
+                    
+                    EventBus.on('sse:eventDelete', (data) => {
+                        console.log('SSE: Event deleted, refreshing table');
+                        if (customHandlers.onSSEMessage) {
+                            customHandlers.onSSEMessage(data);
+                        }
+                        DataManager.refreshData().then(() => {
+                            DataTablesManager.refreshTable();
+                        });
+                    });
+                } else if (entityType === 'users') {
+                    // Listen for user-specific SSE events
+                    EventBus.on('users:refresh', () => {
+                        console.log('SSE: Users refresh requested, refreshing table');
+                        DataManager.refreshData().then(() => {
+                            DataTablesManager.refreshTable();
+                        });
+                    });
+                }
+                
+                // Listen for generic SSE events if configured
                 if (customHandlers.onSSEMessage) {
                     EventBus.on('sse:message', customHandlers.onSSEMessage);
                 }

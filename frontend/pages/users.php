@@ -68,8 +68,8 @@ require_once __DIR__ . '/../components/data-section-header.php';
                 <form id="editUserForm">
                     <input type="hidden" id="userId">
                     <div class="form-group">
-                        <label for="userName">Name</label>
-                        <input type="text" id="userName" placeholder="Enter user's full name" required>
+                        <label for="editUserName">Name</label>
+                        <input type="text" id="editUserName" placeholder="Enter user's full name" required>
                     </div>
                     <div class="form-group">
                         <label for="userEmail">Email</label>
@@ -77,7 +77,7 @@ require_once __DIR__ . '/../components/data-section-header.php';
                     </div>
                     <div class="form-group" id="passwordGroup">
                         <label for="userPassword">Password</label>
-                        <input type="password" id="userPassword" placeholder="Enter password (min 6 characters)">
+                        <input type="password" id="userPassword" placeholder="Enter password (min 6 characters)" autocomplete="new-password">
                         <small class="form-hint">Leave blank to keep existing password</small>
                     </div>
                     <div class="form-group">

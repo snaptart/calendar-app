@@ -124,12 +124,10 @@ export const EventsPageConfig = {
         },
         
         onSSEMessage: (data) => {
-            // Handle real-time event updates
-            if (data.type === 'event_updated' || data.type === 'event_created' || data.type === 'event_deleted') {
-                // Refresh events data
-                console.log('SSE event received:', data.type);
-                // The factory will handle refreshing through the DataManager
-            }
+            // Handle real-time event updates - this method will be called from the factory
+            // when SSE events are received
+            console.log('SSE event received for events table:', data);
+            return true; // Allow the factory to handle the refresh
         }
     }
 };
