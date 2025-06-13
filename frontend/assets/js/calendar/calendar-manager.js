@@ -33,7 +33,7 @@ export const CalendarManager = (() => {
             // Visual settings
             dayMaxEvents: true,
             weekends: true,
-            height: 'auto',
+            height: '100%',
             
             events: [],
             

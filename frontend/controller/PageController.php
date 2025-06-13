@@ -43,25 +43,30 @@ class PageController {
         include 'frontend/layout/html-head.php';
         ?>
         <body>
+            <!-- Header Section -->
+            <?php include 'frontend/layout/header.php'; ?>
+            
             <div class="container">
-                <?php include 'frontend/layout/header.php'; ?>
-                
-                <?php if (isset($config['sidebar']) && $config['sidebar']): ?>
-                <div class="calendar-controls">
-                    <?php include 'frontend/layout/sidebar.php'; ?>
-                </div>
-                <?php endif; ?>
+                <div class="layout-wrapper">
+                    <!-- Sidebar Section -->
+                    <?php if (isset($config['sidebar']) && $config['sidebar']): ?>
+                    <aside class="sidebar">
+                        <?php include 'frontend/layout/sidebar.php'; ?>
+                    </aside>
+                    <?php endif; ?>
 
-                <main id="main-content">
-                    <?php
-                    $pageFile = "frontend/pages/{$page}.php";
-                    if (file_exists($pageFile)) {
-                        include $pageFile;
-                    } else {
-                        echo '<div class="error-message"><p>Page not found.</p></div>';
-                    }
-                    ?>
-                </main>
+                    <!-- Main Content Section -->
+                    <main id="main-content">
+                        <?php
+                        $pageFile = "frontend/pages/{$page}.php";
+                        if (file_exists($pageFile)) {
+                            include $pageFile;
+                        } else {
+                            echo '<div class="error-message"><p>Page not found.</p></div>';
+                        }
+                        ?>
+                    </main>
+                </div>
             </div>
 
             <?php include 'frontend/layout/footer.php'; ?>

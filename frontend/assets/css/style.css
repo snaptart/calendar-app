@@ -12,6 +12,13 @@
     box-sizing: border-box;
 }
 
+html, body {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+}
+
 body {
     font-family: 'Noto Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     background-color: #f8fafc;
@@ -23,18 +30,18 @@ body {
 }
 
 .container {
-    max-width: 1400px;
-    margin: 0 auto;
-    padding: 24px;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
 }
 
 /* Header Styles */
 header {
     background: white;
-    border-radius: 12px;
-    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
-    margin-bottom: 24px;
     border: 1px solid #e2e8f0;
+    border-bottom: 1px solid #e2e8f0;
 }
 
 .header-content {
@@ -145,19 +152,40 @@ header h1 {
 	}
 }
 
-/* Calendar Controls */
-.calendar-controls {
-    background: white;
-    border-radius: 12px;
-    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
-    margin-bottom: 24px;
-    border: 1px solid #e2e8f0;
-    padding: 24px 32px;
+/* Layout Wrapper */
+.layout-wrapper {
     display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    flex-wrap: wrap;
-    gap: 24px;
+    flex: 1;
+    gap: 0;
+    overflow: hidden;
+}
+
+/* Sidebar Styles */
+.sidebar {
+    width: 300px;
+    background: white;
+    border-right: 1px solid #e2e8f0;
+    padding: 24px;
+    flex-shrink: 0;
+}
+
+/* Main Content Area */
+#main-content {
+    flex: 1;
+    background: white;
+    padding: 0;
+    height: 100%;
+    overflow: hidden;
+}
+
+/* Legacy Calendar Controls - for sidebar content */
+.sidebar .user-filters,
+.sidebar .calendar-actions {
+    margin-bottom: 24px;
+}
+
+.sidebar .calendar-actions {
+    align-items: stretch;
 }
 
 .user-filters h3 {
@@ -218,7 +246,6 @@ header h1 {
 .calendar-actions {
     display: flex;
     flex-direction: column;
-    align-items: flex-end;
     gap: 12px;
 }
 
@@ -508,7 +535,7 @@ header h1 {
 /* Responsive Design */
 @media (max-width: 768px) {
     .container {
-        padding: 16px;
+        padding: 0;
     }
     
     .header-content {
@@ -518,10 +545,19 @@ header h1 {
         gap: 16px;
     }
     
-    .calendar-controls {
+    .layout-wrapper {
         flex-direction: column;
+    }
+    
+    .sidebar {
+        width: 100%;
+        border-right: none;
+        border-bottom: 1px solid #e2e8f0;
         padding: 20px 24px;
-        gap: 20px;
+    }
+    
+    #main-content {
+        padding: 20px 24px;
     }
     
     .calendar-actions {
@@ -578,11 +614,18 @@ header h1 {
 
 @media (max-width: 480px) {
     .container {
-        padding: 12px;
+        padding: 0;
     }
     
-    .header-content,
-    .calendar-controls,
+    .header-content {
+        padding: 16px 20px;
+    }
+    
+    .sidebar,
+    #main-content {
+        padding: 16px 20px;
+    }
+    
     .modal-header,
     .modal-body {
         padding: 16px 20px;
