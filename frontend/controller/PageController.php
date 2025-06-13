@@ -38,6 +38,7 @@ class PageController {
     }
     
     private function renderPage($page, $config) {
+        global $pdo;
         $currentUser = $this->currentUser;
         $pageController = $this;
         include 'frontend/layout/html-head.php';

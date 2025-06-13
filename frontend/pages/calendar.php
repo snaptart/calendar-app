@@ -1,6 +1,7 @@
 <?php
 // Calendar page - Main calendar view
 // This page is included by index.php, so all variables and authentication are already available
+
 ?>
 
 <div class="calendar-wrapper">

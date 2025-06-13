@@ -14,14 +14,14 @@ return [
         'styles' => ['events.css', 'table.css'],
         'scripts' => ['events.js'],
         'requires' => ['datatables'],
-        'sidebar' => false
+        'sidebar' => true
     ],
     'users' => [
         'title' => 'Users',
         'styles' => ['events.css', 'table.css'],
         'scripts' => ['users.js'],
         'requires' => ['datatables'],
-        'sidebar' => false
+        'sidebar' => true
     ],
     'import' => [
         'title' => 'Import',

@@ -14,7 +14,7 @@ export const TableManager = (() => {
      */
     const create = (tableId, options = {}) => {
         const defaultOptions = {
-            pageLength: 25,
+            pageLength: 5,
             responsive: true,
             searching: true,
             paging: true,

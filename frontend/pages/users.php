@@ -78,7 +78,7 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 
-<div class="stats-section">
+<div class="stats-section" style="display: none;">
     <div class="stats-grid">
         <div class="stat-item">
             <div class="stat-number"><?php echo $userStats['total']; ?></div>

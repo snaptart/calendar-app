@@ -68,14 +68,16 @@ class UrlHelper {
     }
     
     public static function isActive($path, $exact = false) {
-        $currentPath = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
-        $currentPath = rtrim($currentPath, '/') ?: '/';
-        $path = rtrim($path, '/') ?: '/';
+        // Handle query parameter based routing
+        $currentPage = $_GET['page'] ?? 'calendar';
         
-        if ($exact) {
-            return $currentPath === $path;
+        // Convert path to page name for comparison
+        $pageName = ltrim($path, '/');
+        if (empty($pageName)) {
+            $pageName = 'calendar';
         }
         
-        return str_starts_with($currentPath, $path);
+        // Direct comparison for our query-based routing
+        return $currentPage === $pageName;
     }
 }

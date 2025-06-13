@@ -38,7 +38,7 @@ $navItems = [
         </div>
         <div class="user-section">
             <label for="userName">
-                Logged in as
+                Logged in as monsieur
             </label>
             <input type="text" 
                    id="userName" 

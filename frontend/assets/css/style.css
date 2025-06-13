@@ -54,6 +54,8 @@ header {
     align-items: center;
     flex-wrap: wrap;
     gap: 24px;
+    min-height: 101.333px;
+    box-sizing: border-box;
 }
 
 header h1 {
@@ -119,7 +121,7 @@ header h1 i {
 	align-items: center;
 }
 
-.nav-link {
+.main-navigation .nav-link {
 	color: #4a5568;
 	text-decoration: none;
 	font-size: 0.875rem;
@@ -131,21 +133,22 @@ header h1 i {
 	display: flex;
 	align-items: center;
 	gap: 8px;
+	box-sizing: border-box;
 }
 
-.nav-link i {
+.main-navigation .nav-link i {
 	width: 16px;
 	height: 16px;
 }
 
-.nav-link:hover {
+.main-navigation .nav-link:hover {
 	color: #2d3748;
 	background: #f7fafc;
 	border-color: #e2e8f0;
 	text-decoration: none;
 }
 
-.nav-link.active {
+.main-navigation .nav-link.active {
 	color: #4299e1;
 	background: #ebf8ff;
 	border-color: #4299e1;
