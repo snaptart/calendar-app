@@ -8,6 +8,7 @@ $navItems = [
     'calendar' => ['icon' => 'calendar', 'label' => 'Calendar'],
     'events' => ['icon' => 'list-checks', 'label' => 'Events'],
     'users' => ['icon' => 'users', 'label' => 'Users'],
+    'programs' => ['icon' => 'target', 'label' => 'Programs'],
     'import' => ['icon' => 'download', 'label' => 'Import']
 ];
 ?>

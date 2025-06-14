@@ -23,6 +23,13 @@ return [
         'requires' => ['datatables'],
         'sidebar' => true
     ],
+    'programs' => [
+        'title' => 'Programs',
+        'styles' => ['components.css', 'data-tables.css', 'table.css'],
+        'scripts' => ['programs.js'],
+        'requires' => ['datatables'],
+        'sidebar' => true
+    ],
     'import' => [
         'title' => 'Import',
         'styles' => ['components.css', 'import.css'],

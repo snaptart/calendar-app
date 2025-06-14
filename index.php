@@ -60,6 +60,7 @@ include 'frontend/layout/html-head.php';
     <script src="frontend/assets/js/modules/calendar-module.js" type="module"></script>
     <script src="frontend/assets/js/modules/events-module.js" type="module"></script>
     <script src="frontend/assets/js/modules/users-module.js" type="module"></script>
+    <script src="frontend/assets/js/modules/programs-module.js" type="module"></script>
     <script src="frontend/assets/js/modules/import-module.js" type="module"></script>
     
     <!-- Load SPA infrastructure -->

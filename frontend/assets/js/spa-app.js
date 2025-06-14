@@ -73,6 +73,9 @@ class SPAApplication {
         // Users route  
         router.register('/users', async () => this.loadModule('users'));
         
+        // Programs route
+        router.register('/programs', async () => this.loadModule('programs'));
+        
         // Import route
         router.register('/import', async () => this.loadModule('import'));
     }

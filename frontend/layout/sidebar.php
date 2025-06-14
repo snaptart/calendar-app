@@ -13,7 +13,7 @@ function updateSidebarContent(pageName) {
     const sidebarContent = document.getElementById('sidebar-content');
     if (!sidebarContent) return;
     
-    if (pageName === 'events' || pageName === 'users' || pageName === 'import') {
+    if (pageName === 'events' || pageName === 'users' || pageName === 'programs' || pageName === 'import') {
         // Empty content with placeholder for events, users, and import pages
         sidebarContent.innerHTML = `
             <div class="sidebar-placeholder">
@@ -75,6 +75,10 @@ document.addEventListener('module:users:init', () => {
 
 document.addEventListener('module:import:init', () => {
     updateSidebarContent('import');
+});
+
+document.addEventListener('module:programs:init', () => {
+    updateSidebarContent('programs');
 });
 
 // Initial update - determine page from URL
