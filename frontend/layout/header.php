@@ -15,9 +15,6 @@ $navItems = [
 <header>
     <div class="header-content">
         <div class="header-left">
-            <h1>
-                <i data-lucide="chart-area"></i> <?php echo htmlspecialchars($currentUser['name'] ?? 'User'); ?>'s Calendar
-            </h1>
             <nav class="main-navigation">
                 <?php foreach ($navItems as $navPage => $navConfig): ?>
                     <?php

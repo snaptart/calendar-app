@@ -28,6 +28,6 @@ return [
         'styles' => ['components.css', 'import.css'],
         'scripts' => ['import.js'],
         'requires' => [],
-        'sidebar' => false
+        'sidebar' => true
     ]
 ];

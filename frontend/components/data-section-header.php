@@ -52,7 +52,7 @@ function renderDataSectionHeader($config) {
         <div class="section-header">
             <div class="section-info">
                 <h3><?= $title ?></h3>
-                <p class="section-description"><?= $description ?></p>
+                <!-- <p class="section-description"><?= $description ?></p> -->
             </div>
             <div class="section-controls">
                 <div class="filter-controls">
@@ -96,7 +96,7 @@ function renderDataSectionHeader($config) {
  */
 function getEventsPageConfig() {
     return [
-        'title' => 'Calendar Events',
+        'title' => 'Events',
         'description' => 'View and manage calendar events with advanced filtering and search',
         'filters' => [
             [
