@@ -43,419 +43,213 @@
     background: #e5e7eb;
 }
 
-/* Export Controls Styling */
+/* Simplified Export Controls - Let DataTables handle */
 .export-controls {
     display: flex;
     align-items: center;
-    gap: 8px;
-    background: #6b7280;
-    padding: 12px 24px;
-    border-radius: 0;
-    margin-bottom: 0;
-    border: none;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
 }
 
 .export-btn {
-    background: #374151;
+    background: #007bff;
     color: white;
     border: none;
-    padding: 8px 16px;
+    padding: 0.5rem 1rem;
     border-radius: 4px;
     font-size: 0.875rem;
     cursor: pointer;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    transition: all 0.2s ease;
+    transition: background-color 0.2s;
 }
 
 .export-btn:hover {
-    background: #1f2937;
+    background: #0056b3;
 }
 
-.search-box {
-    margin-left: auto;
-}
-
-.search-box input {
-    padding: 8px 12px;
-    border: 1px solid #d1d5db;
-    border-radius: 6px;
-    font-size: 0.875rem;
-    width: 250px;
-}
-
-.search-box input:focus {
-    outline: none;
-    border-color: #3b82f6;
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-}
-
-/* Enhanced Filter Controls */
+/* Simplified Filter Controls */
 .filter-controls {
     display: flex;
-    gap: 16px;
+    gap: 1rem;
     align-items: center;
     justify-content: flex-end;
     flex-wrap: wrap;
+    margin-bottom: 1rem;
 }
 
 .filter-group {
     display: flex;
     align-items: center;
-    gap: 8px;
-    min-width: 120px;
+    gap: 0.5rem;
 }
 
 .filter-group label {
-    font-size: 0.75rem;
+    font-size: 0.875rem;
     font-weight: 500;
-    color: #4a5568;
-    text-transform: uppercase;
-    letter-spacing: 0.025em;
-    white-space: nowrap;
+    color: #333;
 }
 
 .filter-group select {
-    padding: 6px 12px;
-    border: 1px solid #e2e8f0;
-    border-radius: 6px;
+    padding: 0.5rem;
+    border: 1px solid #ccc;
+    border-radius: 4px;
     font-size: 0.875rem;
     background: white;
-    color: #2d3748;
-    transition: all 0.2s ease;
-}
-
-.filter-group select:focus {
-    outline: none;
-    border-color: #4299e1;
-    box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.1);
 }
 
 .action-buttons {
     display: flex;
-    gap: 8px;
-    align-items: center;
-    margin-left: auto;
-}
-
-/* Navigation Enhancements */
-.breadcrumb-nav {
-    display: flex;
-    gap: 8px;
+    gap: 0.5rem;
     align-items: center;
 }
 
-.nav-separator {
-    color: #a0aec0;
-    font-size: 0.875rem;
-}
 
-/* DateTime Cell Styling */
+/* Simple DateTime Cell Styling */
 .datetime-cell {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    line-height: 1.2;
+    font-size: 0.875rem;
+    line-height: 1.4;
 }
 
 .datetime-main {
     font-weight: 500;
-    color: #2d3748;
-    font-size: 0.875rem;
+    color: #333;
 }
 
 .datetime-time {
     font-size: 0.75rem;
-    color: #4a5568;
+    color: #666;
 }
 
 .datetime-relative {
     font-size: 0.625rem;
-    color: #718096;
+    color: #999;
     font-style: italic;
 }
 
-/* Owner Cell Styling */
+/* Simple Owner Cell Styling */
 .owner-cell {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 0.5rem;
 }
 
 .user-color-indicator {
-    width: 16px;
-    height: 16px;
+    width: 12px;
+    height: 12px;
     border-radius: 50%;
-    border: 2px solid white;
-    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.1);
+    border: 1px solid #ccc;
     flex-shrink: 0;
 }
 
 .user-name {
     font-size: 0.875rem;
-    color: #2d3748;
-    font-weight: 500;
+    color: #333;
+    font-weight: normal;
 }
 
-/* Enhanced Status Badges */
+/* Simple Status Badges */
 .status-badge {
-    padding: 4px 8px;
-    border-radius: 12px;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
     font-size: 0.75rem;
     font-weight: 500;
     text-transform: uppercase;
-    letter-spacing: 0.025em;
     white-space: nowrap;
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    min-width: 80px;
-    justify-content: center;
+    display: inline-block;
 }
 
 .status-badge.upcoming {
-    background: #e6fffa;
-    color: #234e52;
-    border: 1px solid #81e6d9;
+    background: #d1ecf1;
+    color: #0c5460;
 }
 
 .status-badge.ongoing {
-    background: #fed7d7;
-    color: #742a2a;
-    border: 1px solid #fc8181;
-    animation: pulse 2s infinite;
+    background: #f8d7da;
+    color: #721c24;
 }
 
 .status-badge.past {
-    background: #f0fff4;
-    color: #22543d;
-    border: 1px solid #9ae6b4;
+    background: #d4edda;
+    color: #155724;
 }
 
 .status-badge.unknown {
-    background: #f7fafc;
-    color: #4a5568;
-    border: 1px solid #e2e8f0;
+    background: #e2e3e5;
+    color: #383d41;
 }
 
-@keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.7; }
-}
-
-/* Actions Cell */
+/* Simple Actions Cell */
 .actions-cell {
     display: flex;
-    gap: 4px;
+    gap: 0.25rem;
     justify-content: center;
     flex-wrap: wrap;
 }
 
 .actions-cell .btn {
-    padding: 4px 8px;
+    padding: 0.25rem 0.5rem;
     font-size: 0.75rem;
     min-width: auto;
     white-space: nowrap;
 }
 
-/* Events Summary Cards - Hidden to match screenshot */
-.events-summary {
-    display: none;
-}
 
-.summary-cards {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 24px;
-}
 
-.summary-card {
-    text-align: center;
-    padding: 20px;
-    background: #f7fafc;
-    border-radius: 8px;
-    border: 1px solid #e2e8f0;
-    transition: all 0.2s ease;
-}
-
-.summary-card:hover {
-    background: #edf2f7;
-    border-color: #cbd5e0;
-    transform: translateY(-2px);
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-}
-
-.summary-number {
-    font-size: 2rem;
-    font-weight: 700;
-    color: #2d3748;
-    margin-bottom: 8px;
-}
-
-.summary-label {
-    font-size: 0.875rem;
-    color: #4a5568;
-    font-weight: 500;
-    text-transform: uppercase;
-    letter-spacing: 0.025em;
-}
-
-/* Event Modal Enhancements */
-.event-detail-grid {
-    display: grid;
-    gap: 16px;
-    margin-bottom: 24px;
-}
-
-.detail-row {
-    display: grid;
-    grid-template-columns: 120px 1fr;
-    gap: 16px;
-    align-items: center;
-    padding: 12px 0;
-    border-bottom: 1px solid #f1f5f9;
-}
-
-.detail-row:last-child {
-    border-bottom: none;
-}
-
-.detail-row label {
-    font-weight: 600;
-    color: #4a5568;
-    font-size: 0.875rem;
-    margin: 0;
-}
-
-.detail-row span {
-    color: #2d3748;
-    font-size: 0.875rem;
-}
-
-.event-actions {
-    display: flex;
-    gap: 12px;
-    justify-content: center;
-    padding-top: 20px;
-    border-top: 1px solid #e2e8f0;
-    flex-wrap: wrap;
-}
-
-/* Enhanced Table Controls */
+/* Simplified Controls - Let DataTables handle positioning */
 .table-controls {
-    background: white;
-    border-radius: 12px;
-    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
-    margin-bottom: 16px;
-    border: 1px solid #e5e7eb;
-    padding: 24px 32px;
-}
-
-.table-controls .table-info {
-    margin-bottom: 16px;
+    margin-bottom: 1rem;
+    padding: 1rem;
+    background: #f8f9fa;
+    border-radius: 4px;
 }
 
 .table-controls .table-actions {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 16px;
+    gap: 1rem;
 }
 
-/* Table Styling to Match Screenshot */
-.table-wrapper {
-    background: white;
-    border-radius: 0;
-    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
-    border: 1px solid #e5e7eb;
-    border-top: none;
-    overflow: hidden;
+/* Minimal DataTables Styling - Use defaults */
+.table-container {
+    margin: 1rem 0;
 }
 
-.table {
-    margin-bottom: 0;
-    font-size: 0.875rem;
+/* Remove custom table styling to use DataTables defaults */
+#eventsTable, #usersTable {
+    width: 100% !important;
 }
 
-.table thead th {
-    background: #f9fafb;
-    border-bottom: 1px solid #e5e7eb;
-    color: #6b7280;
-    font-weight: 600;
-    font-size: 0.75rem;
-    text-transform: uppercase;
-    letter-spacing: 0.025em;
-    padding: 16px 12px;
-    border-top: none;
-}
-
-.table tbody td {
-    padding: 16px 12px;
-    border-bottom: 1px solid #f3f4f6;
-    vertical-align: middle;
-}
-
-.table tbody tr:last-child td {
-    border-bottom: none;
-}
-
+/* Keep only essential custom cell styling */
 .table tbody tr:hover {
-    background-color: #f9fafb;
-}
-
-/* Connection Status Styling */
-.connection-status .status {
-    background: #dcfce7;
-    color: #166534;
-    padding: 4px 12px;
-    border-radius: 6px;
-    font-size: 0.75rem;
-    font-weight: 500;
-    border: 1px solid #bbf7d0;
+    background-color: #f5f5f5;
 }
 
 
-/* Loading States for Events */
-.loading-event-row {
-    background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
-    background-size: 200% 100%;
-    animation: loading 1.5s infinite;
-}
 
-@keyframes loading {
-    0% { background-position: 200% 0; }
-    100% { background-position: -200% 0; }
-}
-
-/* Event Row Highlighting */
+/* Simple Event Row Highlighting */
 .table tbody tr.event-upcoming {
-    border-left: 4px solid #81e6d9;
+    border-left: 3px solid #007bff;
 }
 
 .table tbody tr.event-ongoing {
-    border-left: 4px solid #fc8181;
-    background-color: #fef5e7 !important;
+    border-left: 3px solid #dc3545;
+    background-color: #fff5f5 !important;
 }
 
 .table tbody tr.event-past {
-    opacity: 0.8;
+    opacity: 0.7;
 }
 
 .table tbody tr.event-mine {
-    background-color: #ebf8ff !important;
+    background-color: #f8f9fa !important;
 }
 
-/* Enhanced Responsive Design */
+/* Basic Responsive Design */
 @media (max-width: 768px) {
     .filter-controls {
         flex-direction: column;
         align-items: stretch;
-        gap: 12px;
-    }
-    
-    .filter-group {
-        min-width: auto;
+        gap: 0.75rem;
     }
     
     .action-buttons {
@@ -463,99 +257,29 @@
         width: 100%;
     }
     
-    .summary-cards {
-        grid-template-columns: repeat(2, 1fr);
-        gap: 16px;
-    }
-    
-    .summary-card {
-        padding: 16px;
-    }
-    
-    .summary-number {
-        font-size: 1.5rem;
-    }
-    
-    .datetime-cell {
-        font-size: 0.75rem;
-    }
-    
-    .datetime-main {
-        font-size: 0.75rem;
-    }
-    
-    .datetime-time {
-        font-size: 0.625rem;
-    }
-    
-    .datetime-relative {
-        font-size: 0.5rem;
-    }
-    
     .actions-cell {
         flex-direction: column;
-        gap: 2px;
+        gap: 0.125rem;
     }
     
     .actions-cell .btn {
         font-size: 0.625rem;
-        padding: 3px 6px;
-    }
-    
-    .detail-row {
-        grid-template-columns: 1fr;
-        gap: 8px;
-        text-align: left;
-    }
-    
-    .detail-row label {
-        font-weight: 600;
-        color: #4a5568;
-    }
-    
-    .event-actions {
-        flex-direction: column;
-        gap: 8px;
+        padding: 0.125rem 0.375rem;
     }
 }
 
 @media (max-width: 480px) {
-    .events-summary {
-        padding: 16px 20px;
-    }
-    
-    .summary-cards {
-        grid-template-columns: 1fr;
-        gap: 12px;
-    }
-    
-    .summary-card {
-        padding: 12px;
-    }
-    
-    .summary-number {
-        font-size: 1.25rem;
-    }
-    
-    .summary-label {
-        font-size: 0.75rem;
-    }
-    
     .table-controls {
-        padding: 16px 20px;
-    }
-    
-    .table-controls .table-actions {
-        align-items: stretch;
+        padding: 0.75rem;
     }
     
     .owner-cell {
-        gap: 6px;
+        gap: 0.375rem;
     }
     
     .user-color-indicator {
-        width: 12px;
-        height: 12px;
+        width: 10px;
+        height: 10px;
     }
     
     .user-name {
@@ -564,184 +288,27 @@
     
     .status-badge {
         font-size: 0.625rem;
-        padding: 3px 6px;
-        min-width: 60px;
+        padding: 0.125rem 0.375rem;
     }
 }
 
-/* Print Styles */
+/* Simple Print Styles */
 @media print {
     .filter-controls,
     .action-buttons,
-    .events-summary,
     .actions-cell {
         display: none !important;
     }
     
-    .table-wrapper,
     .table-container {
         box-shadow: none;
-        border: 1px solid #000;
-    }
-    
-    .datetime-cell {
-        font-size: 0.7rem;
-    }
-    
-    .status-badge {
-        border: 1px solid #000;
-        background: #fff !important;
-        color: #000 !important;
-    }
-    
-    .owner-cell {
-        color: #000;
     }
 }
 
-/* High Contrast Mode Support */
-@media (prefers-contrast: high) {
-    .status-badge {
-        border-width: 2px;
-        font-weight: 600;
-    }
-    
-    .user-color-indicator {
-        border-width: 3px;
-        border-color: #000;
-    }
-    
-    .summary-card {
-        border-width: 2px;
-    }
-    
-    .datetime-cell {
-        color: #000;
-    }
-}
 
-/* Dark Mode Support */
-@media (prefers-color-scheme: dark) {
-    .events-summary,
-    .summary-card {
-        background: #2d3748;
-        border-color: #4a5568;
-        color: #e2e8f0;
-    }
-    
-    .summary-number {
-        color: #e2e8f0;
-    }
-    
-    .summary-label {
-        color: #a0aec0;
-    }
-    
-    .datetime-main {
-        color: #e2e8f0;
-    }
-    
-    .datetime-time {
-        color: #a0aec0;
-    }
-    
-    .datetime-relative {
-        color: #718096;
-    }
-    
-    .user-name {
-        color: #e2e8f0;
-    }
-    
-    .detail-row label {
-        color: #a0aec0;
-    }
-    
-    .detail-row span {
-        color: #e2e8f0;
-    }
-}
 
-/* Animation Classes */
-.fade-in-up {
-    animation: fadeInUp 0.3s ease-out;
-}
 
-@keyframes fadeInUp {
-    from { 
-        opacity: 0; 
-        transform: translateY(20px); 
-    }
-    to { 
-        opacity: 1; 
-        transform: translateY(0); 
-    }
-}
 
-.scale-in {
-    animation: scaleIn 0.2s ease-out;
-}
-
-@keyframes scaleIn {
-    from { 
-        opacity: 0; 
-        transform: scale(0.95); 
-    }
-    to { 
-        opacity: 1; 
-        transform: scale(1); 
-    }
-}
-
-/* Hover Effects */
-.summary-card {
-    transition: all 0.2s ease;
-}
-
-.summary-card:hover .summary-number {
-    color: #4299e1;
-    transform: scale(1.05);
-    transition: all 0.2s ease;
-}
-
-.status-badge.upcoming:hover {
-    background: #b2f5ea;
-    transform: scale(1.05);
-}
-
-.status-badge.ongoing:hover {
-    background: #fc8181;
-    color: white;
-    transform: scale(1.05);
-}
-
-.status-badge.past:hover {
-    background: #c6f6d5;
-    transform: scale(1.05);
-}
-
-/* Focus States */
-.filter-group select:focus,
-.btn:focus {
-    outline: none;
-    box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.1);
-}
-
-/* Accessibility Improvements */
-.actions-cell .btn:focus-visible,
-.event-actions .btn:focus-visible {
-    outline: 2px solid #4299e1;
-    outline-offset: 2px;
-}
-
-/* Loading Animation for Summary Cards */
-.summary-card.loading .summary-number {
-    background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
-    background-size: 200% 100%;
-    animation: loading 1.5s infinite;
-    color: transparent;
-    border-radius: 4px;
-}
 
 /* Event Status Indicators */
 .event-indicator {
@@ -749,65 +316,17 @@
     width: 8px;
     height: 8px;
     border-radius: 50%;
-    margin-right: 8px;
+    margin-right: 0.5rem;
 }
 
 .event-indicator.upcoming {
-    background: #81e6d9;
+    background: #007bff;
 }
 
 .event-indicator.ongoing {
-    background: #fc8181;
-    animation: pulse 2s infinite;
+    background: #dc3545;
 }
 
 .event-indicator.past {
-    background: #9ae6b4;
-}
-
-/* Enhanced Table Styling */
-.table tbody tr:hover .datetime-cell {
-    background: rgba(66, 153, 225, 0.05);
-    border-radius: 4px;
-    padding: 4px;
-}
-
-.table tbody tr:hover .owner-cell {
-    background: rgba(66, 153, 225, 0.05);
-    border-radius: 4px;
-    padding: 4px;
-}
-
-/* Tooltip Enhancement */
-[data-tooltip] {
-    position: relative;
-    cursor: help;
-}
-
-[data-tooltip]:hover::after {
-    content: attr(data-tooltip);
-    position: absolute;
-    bottom: 100%;
-    left: 50%;
-    transform: translateX(-50%);
-    background: #2d3748;
-    color: white;
-    padding: 8px 12px;
-    border-radius: 6px;
-    font-size: 0.75rem;
-    white-space: nowrap;
-    z-index: 1000;
-    opacity: 1;
-    transition: opacity 0.2s ease;
-}
-
-[data-tooltip]:hover::before {
-    content: '';
-    position: absolute;
-    bottom: 94%;
-    left: 50%;
-    transform: translateX(-50%);
-    border: 5px solid transparent;
-    border-top-color: #2d3748;
-    z-index: 1000;
+    background: #28a745;
 }

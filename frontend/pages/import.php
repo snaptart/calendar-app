@@ -63,7 +63,7 @@
         <div id="importSummary" class="import-summary"></div>
         
         <div class="preview-table-container">
-            <table class="data-table">
+            <table class="display">
                 <thead>
                     <tr>
                         <th>

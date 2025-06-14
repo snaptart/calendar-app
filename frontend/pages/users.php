@@ -102,7 +102,7 @@ document.addEventListener('DOMContentLoaded', function() {
 <?php renderUsersPageHeader(); ?>
 
 <div class="table-container">
-    <table id="usersTable" class="data-table">
+    <table id="usersTable" class="display">
         <thead>
             <tr>
                 <th>Color</th>

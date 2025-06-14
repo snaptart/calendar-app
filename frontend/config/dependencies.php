@@ -11,7 +11,10 @@ return [
         'js' => ['https://cdn.jsdelivr.net/npm/fullcalendar@6.1.17/index.global.min.js']
     ],
     'datatables' => [
-        'css' => [],
+        'css' => [
+            'https://cdn.datatables.net/1.13.7/css/jquery.dataTables.min.css',
+            'https://cdn.datatables.net/buttons/2.4.2/css/buttons.dataTables.min.css'
+        ],
         'js' => [
             'https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js',
             'https://cdn.datatables.net/buttons/2.4.2/js/dataTables.buttons.min.js',

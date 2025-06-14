@@ -32,7 +32,7 @@ require_once __DIR__ . '/../components/data-section-header.php';
 
 
 <div class="table-container">
-    <table id="eventsTable" class="data-table">
+    <table id="eventsTable" class="display">
         <thead>
             <tr>
                 <th>Title</th>
