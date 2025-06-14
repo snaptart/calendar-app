@@ -112,8 +112,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 <th>Events Count</th>
                 <th>Member Since</th>
                 <th>Last Activity</th>
-                <th>Status</th>
-                <th>Actions</th>
             </tr>
         </thead>
         <tbody id="usersTableBody">

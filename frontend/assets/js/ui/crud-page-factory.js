@@ -135,11 +135,58 @@ export const CrudPageFactory = (() => {
                 }
             };
             
+            const updateSingleRecord = (updatedRecord) => {
+                const index = entityData.findIndex(item => item.id === updatedRecord.id);
+                if (index !== -1) {
+                    // Apply data transformation if provided
+                    const transformedRecord = dataTransform ? dataTransform(updatedRecord) : updatedRecord;
+                    entityData[index] = transformedRecord;
+                    console.log(`Updated single ${entityType} record with ID: ${updatedRecord.id}`);
+                    EventBus.emit(`${entityType}:single-updated`, { entity: transformedRecord });
+                    return true;
+                } else {
+                    console.log(`${entityType} record with ID ${updatedRecord.id} not found in cache, performing full refresh`);
+                    return false;
+                }
+            };
+            
+            const addSingleRecord = (newRecord) => {
+                // Apply data transformation if provided
+                const transformedRecord = dataTransform ? dataTransform(newRecord) : newRecord;
+                entityData.push(transformedRecord);
+                console.log(`Added single ${entityType} record with ID: ${newRecord.id}`);
+                EventBus.emit(`${entityType}:single-added`, { entity: transformedRecord });
+            };
+            
+            const removeSingleRecord = (recordId) => {
+                const index = entityData.findIndex(item => item.id === recordId);
+                if (index !== -1) {
+                    const removedRecord = entityData[index];
+                    entityData.splice(index, 1);
+                    console.log(`Removed single ${entityType} record with ID: ${recordId}`);
+                    EventBus.emit(`${entityType}:single-removed`, { entity: removedRecord });
+                    return true;
+                } else {
+                    console.log(`${entityType} record with ID ${recordId} not found in cache`);
+                    return false;
+                }
+            };
+            
+            const clearData = () => {
+                entityData = [];
+                lastFetchTime = 0;
+                currentFilters = { ...filters.defaults };
+            };
+            
             return {
                 loadData,
                 getFilteredData,
                 updateFilters,
                 refreshData,
+                updateSingleRecord,
+                addSingleRecord,
+                removeSingleRecord,
+                clearData,
                 getData: () => entityData,
                 getFilters: () => ({ ...currentFilters }),
                 getLastFetchTime: () => lastFetchTime
@@ -183,7 +230,7 @@ export const CrudPageFactory = (() => {
             
             const setupTableEvents = () => {
                 // Row click handler
-                EventBus.on('table:row-click', (data) => {
+                EventHandler.on('table:' + entityType + ':row-click', (data) => {
                     if (data.tableId === tableId && data.rowData) {
                         if (customHandlers.onRowClick) {
                             customHandlers.onRowClick(data.rowData);
@@ -194,7 +241,7 @@ export const CrudPageFactory = (() => {
                 });
                 
                 // Button click handler
-                EventBus.on('table:button-click', (data) => {
+                EventHandler.on('table:' + entityType + ':button-click', (data) => {
                     if (data.tableId === tableId) {
                         if (customHandlers.onButtonClick) {
                             customHandlers.onButtonClick(data);
@@ -211,9 +258,45 @@ export const CrudPageFactory = (() => {
                 }
             };
             
+            const updateSingleRow = (updatedRecord) => {
+                if (dataTable) {
+                    // Find the row by ID
+                    const rowIndex = dataTable.data().toArray().findIndex(row => row.id === updatedRecord.id);
+                    if (rowIndex !== -1) {
+                        // Update the row data
+                        dataTable.row(rowIndex).data(updatedRecord).draw(false);
+                        console.log(`Updated single table row for ${entityType} ID: ${updatedRecord.id}`);
+                        return true;
+                    }
+                }
+                return false;
+            };
+            
+            const addSingleRow = (newRecord) => {
+                if (dataTable) {
+                    dataTable.row.add(newRecord).draw(false);
+                    console.log(`Added single table row for ${entityType} ID: ${newRecord.id}`);
+                }
+            };
+            
+            const removeSingleRow = (recordId) => {
+                if (dataTable) {
+                    const rowIndex = dataTable.data().toArray().findIndex(row => row.id === recordId);
+                    if (rowIndex !== -1) {
+                        dataTable.row(rowIndex).remove().draw(false);
+                        console.log(`Removed single table row for ${entityType} ID: ${recordId}`);
+                        return true;
+                    }
+                }
+                return false;
+            };
+            
             return {
                 initializeDataTable,
                 refreshTable,
+                updateSingleRow,
+                addSingleRow,
+                removeSingleRow,
                 getDataTable: () => dataTable
             };
         })();
@@ -307,19 +390,19 @@ export const CrudPageFactory = (() => {
                 }
                 
                 // Listen for entity updates
-                EventBus.on(`${entityType}:created`, () => {
+                EventHandler.on(`${entityType}:created`, () => {
                     DataManager.refreshData().then(() => {
                         DataTablesManager.refreshTable();
                     });
                 });
                 
-                EventBus.on(`${entityType}:updated`, () => {
+                EventHandler.on(`${entityType}:updated`, () => {
                     DataManager.refreshData().then(() => {
                         DataTablesManager.refreshTable();
                     });
                 });
                 
-                EventBus.on(`${entityType}:deleted`, () => {
+                EventHandler.on(`${entityType}:deleted`, () => {
                     DataManager.refreshData().then(() => {
                         DataTablesManager.refreshTable();
                     });
@@ -329,6 +412,28 @@ export const CrudPageFactory = (() => {
             return {
                 initializeModalHandlers
             };
+        })();
+
+        // =============================================================================
+        // EVENT HANDLER MANAGER
+        // =============================================================================
+        const EventHandler = (() => {
+            const listeners = [];
+            
+            const on = (event, callback) => {
+                EventBus.on(event, callback);
+                listeners.push({ event, callback });
+            };
+            
+            const cleanup = () => {
+                console.log(`Cleaning up ${listeners.length} event listeners for ${entityType}`);
+                listeners.forEach(({ event, callback }) => {
+                    EventBus.off(event, callback);
+                });
+                listeners.length = 0;
+            };
+            
+            return { on, cleanup };
         })();
 
         // =============================================================================
@@ -408,59 +513,88 @@ export const CrudPageFactory = (() => {
             
             const setupEventListeners = () => {
                 // Listen for data loaded events
-                EventBus.on(`${entityType}:loaded`, () => {
+                EventHandler.on(`${entityType}:loaded`, () => {
                     DataTablesManager.refreshTable();
                 });
                 
-                EventBus.on(`${entityType}:filters-changed`, () => {
+                EventHandler.on(`${entityType}:filters-changed`, () => {
                     DataTablesManager.refreshTable();
+                });
+                
+                // Listen for single record updates
+                EventHandler.on(`${entityType}:single-updated`, (data) => {
+                    DataTablesManager.updateSingleRow(data.entity);
+                });
+                
+                EventHandler.on(`${entityType}:single-added`, (data) => {
+                    DataTablesManager.addSingleRow(data.entity);
+                });
+                
+                EventHandler.on(`${entityType}:single-removed`, (data) => {
+                    DataTablesManager.removeSingleRow(data.entity.id);
                 });
                 
                 // Listen for specific SSE events based on entity type
                 if (entityType === 'events') {
                     // Listen for event-specific SSE events
-                    EventBus.on('sse:eventCreate', (data) => {
-                        console.log('SSE: Event created, refreshing table');
+                    EventHandler.on('sse:eventCreate', (data) => {
+                        console.log('SSE: Event created, updating single record');
                         if (customHandlers.onSSEMessage) {
                             customHandlers.onSSEMessage(data);
                         }
-                        DataManager.refreshData().then(() => {
-                            DataTablesManager.refreshTable();
-                        });
+                        if (data.eventData) {
+                            DataManager.addSingleRecord(data.eventData);
+                        } else {
+                            console.warn('SSE event create data missing eventData, falling back to full refresh');
+                            DataManager.refreshData();
+                        }
                     });
                     
-                    EventBus.on('sse:eventUpdate', (data) => {
-                        console.log('SSE: Event updated, refreshing table');
+                    EventHandler.on('sse:eventUpdate', (data) => {
+                        console.log('SSE: Event updated, updating single record');
                         if (customHandlers.onSSEMessage) {
                             customHandlers.onSSEMessage(data);
                         }
-                        DataManager.refreshData().then(() => {
-                            DataTablesManager.refreshTable();
-                        });
+                        if (data.eventData) {
+                            const updated = DataManager.updateSingleRecord(data.eventData);
+                            if (!updated) {
+                                console.warn('Record not found in cache, falling back to full refresh');
+                                DataManager.refreshData();
+                            }
+                        } else {
+                            console.warn('SSE event update data missing eventData, falling back to full refresh');
+                            DataManager.refreshData();
+                        }
                     });
                     
-                    EventBus.on('sse:eventDelete', (data) => {
-                        console.log('SSE: Event deleted, refreshing table');
+                    EventHandler.on('sse:eventDelete', (data) => {
+                        console.log('SSE: Event deleted, removing single record');
                         if (customHandlers.onSSEMessage) {
                             customHandlers.onSSEMessage(data);
                         }
-                        DataManager.refreshData().then(() => {
-                            DataTablesManager.refreshTable();
-                        });
+                        if (data.eventId) {
+                            const removed = DataManager.removeSingleRecord(data.eventId);
+                            if (!removed) {
+                                console.warn('Record not found in cache, falling back to full refresh');
+                                DataManager.refreshData();
+                            }
+                        } else {
+                            console.warn('SSE event delete data missing eventId, falling back to full refresh');
+                            DataManager.refreshData();
+                        }
                     });
                 } else if (entityType === 'users') {
                     // Listen for user-specific SSE events
-                    EventBus.on('users:refresh', () => {
+                    EventHandler.on('users:refresh', () => {
                         console.log('SSE: Users refresh requested, refreshing table');
-                        DataManager.refreshData().then(() => {
-                            DataTablesManager.refreshTable();
-                        });
+                        DataManager.refreshData();
+                        // Note: DataTablesManager.refreshTable() is called by the ${entityType}:loaded event handler
                     });
                 }
                 
                 // Listen for generic SSE events if configured
                 if (customHandlers.onSSEMessage) {
-                    EventBus.on('sse:message', customHandlers.onSSEMessage);
+                    EventHandler.on('sse:message', customHandlers.onSSEMessage);
                 }
                 
                 // Listen for cleanup on page unload
@@ -468,9 +602,11 @@ export const CrudPageFactory = (() => {
             };
             
             const cleanup = () => {
+                console.log(`Cleaning up ${entityType} data manager...`);
+                DataManager.clearData();
+                EventHandler.cleanup();
                 TableManager.destroyAll();
                 SSEManager.disconnect();
-                EventBus.off();
             };
             
             return {
