@@ -21,16 +21,11 @@ $navItems = [
             <nav class="main-navigation">
                 <?php foreach ($navItems as $navPage => $navConfig): ?>
                     <?php
-                    $href = match($navPage) {
-                        'calendar' => UrlHelper::calendar(),
-                        'events' => UrlHelper::events(),
-                        'users' => UrlHelper::users(),
-                        'import' => UrlHelper::import(),
-                        default => UrlHelper::base('/' . $navPage)
-                    };
+                    $route = ($navPage === 'calendar') ? '#/' : '#/' . $navPage;
                     ?>
-                    <a href="<?php echo $href; ?>" 
-                       class="nav-link <?php echo UrlHelper::isActive('/' . $navPage) || ($navPage === 'calendar' && UrlHelper::isActive('/', true)) ? 'active' : ''; ?>">
+                    <a href="<?php echo $route; ?>" 
+                       data-route="<?php echo ($navPage === 'calendar') ? '/' : '/' . $navPage; ?>"
+                       class="nav-link <?php echo ($navPage === 'calendar') ? 'active' : ''; ?>">
                         <i data-lucide="<?php echo $navConfig['icon']; ?>"></i> <?php echo $navConfig['label']; ?>
                     </a>
                 <?php endforeach; ?>

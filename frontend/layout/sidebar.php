@@ -19,11 +19,11 @@
         <i data-lucide="plus"></i>
         Add Event
     </button>
-    <button id="viewEventsBtn" class="btn btn-outline" onclick="window.location.href='index.php?page=events'">
+    <button id="viewEventsBtn" class="btn btn-outline" data-route="/events">
         <i data-lucide="list-checks"></i>
         View All Events
     </button>
-    <button id="importEventsBtn" class="btn btn-outline" onclick="window.location.href='index.php?page=import'">
+    <button id="importEventsBtn" class="btn btn-outline" data-route="/import">
         <i data-lucide="download"></i>
         Import Events
     </button>

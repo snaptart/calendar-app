@@ -28,6 +28,7 @@ try {
     require_once 'models/User.php';
     require_once 'models/Event.php';
     require_once 'models/CalendarUpdate.php';
+    require_once 'helpers/spa-helpers.php';
 } catch (Exception $e) {
     // Clean any output buffer and send error
     ob_clean();
@@ -530,6 +531,31 @@ function handleGetRequest($auth, $userModel, $eventModel, $calendarUpdate) {
             ]);
             break;
             
+        // SPA Support - Get page content
+        case 'get_page_content':
+            $auth->requireAuth();
+            
+            $page = $_GET['page'] ?? 'calendar';
+            $allowedPages = ['calendar', 'events', 'users', 'import'];
+            
+            if (!in_array($page, $allowedPages)) {
+                throw new Exception('Invalid page requested');
+            }
+            
+            // Get page content and configuration
+            $pageContent = getSPAPageContent($page);
+            sendResponse($pageContent);
+            break;
+            
+        // SPA Support - Get page configuration  
+        case 'get_page_config':
+            $auth->requireAuth();
+            
+            $page = $_GET['page'] ?? 'calendar';
+            $pageConfig = getSPAPageConfig($page);
+            sendResponse($pageConfig);
+            break;
+            
         // Import-related GET actions are handled by the proxy detection above
         case 'import_formats':
         case 'import_stats':
@@ -665,6 +691,18 @@ function handlePostRequest($auth, $userModel, $eventModel, $calendarUpdate) {
             
             $updatedUser = $userModel->updateUser($currentUser['id'], $updateData);
             sendResponse($updatedUser);
+            break;
+            
+        // SPA Support - Get dependencies
+        case 'get_dependencies':
+            $auth->requireAuth();
+            
+            if (!isset($input['dependencies']) || !is_array($input['dependencies'])) {
+                throw new Exception('Missing dependencies field');
+            }
+            
+            $dependencies = getSPADependencies($input['dependencies']);
+            sendResponse($dependencies);
             break;
             
         // Import-related actions should be caught by proxy detection
