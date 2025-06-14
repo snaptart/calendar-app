@@ -13,6 +13,8 @@ import { ModalManager } from './ui/modal-manager.js';
 import { SSEManager } from './realtime/sse-manager.js';
 
 export const CollaborativeCalendarApp = (() => {
+    let initialized = false;
+    
     const setupUIEventListeners = () => {
         // Remove user name input handler since it's now disabled
         // User authentication is handled by the login system
@@ -36,6 +38,11 @@ export const CollaborativeCalendarApp = (() => {
     };
     
     const init = async () => {
+        if (initialized) {
+            console.log('Collaborative Calendar already initialized, skipping...');
+            return;
+        }
+        
         console.log('Initializing Collaborative Calendar with authentication...');
         
         // Check authentication first
@@ -61,11 +68,14 @@ export const CollaborativeCalendarApp = (() => {
         // Emit app initialization event
         EventBus.emit('app:init');
         
+        initialized = true;
         console.log('Collaborative Calendar initialized successfully');
     };
     
     const destroy = () => {
         SSEManager.disconnect();
+        CalendarManager.destroy();
+        initialized = false;
         console.log('Collaborative Calendar destroyed');
     };
     

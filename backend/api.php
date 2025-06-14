@@ -347,6 +347,24 @@ function handleGetRequest($auth, $userModel, $eventModel, $calendarUpdate) {
             sendResponse($events);
             break;
             
+        case 'get_page_content':
+            $auth->requireAuth();
+            
+            $page = $_GET['page'] ?? 'calendar';
+            $allowedPages = ['calendar', 'events', 'users', 'import'];
+            
+            if (!in_array($page, $allowedPages)) {
+                throw new Exception('Invalid page requested');
+            }
+            
+            // Include SPA helpers if not already included
+            require_once __DIR__ . '/helpers/spa-helpers.php';
+            
+            // Get page content and configuration
+            $pageContent = getSPAPageContent($page);
+            sendResponse($pageContent);
+            break;
+            
         case 'events_datatable':
             $auth->requireAuth();
             

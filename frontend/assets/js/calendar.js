@@ -9,10 +9,7 @@
 // Import and initialize the modular application
 import { CollaborativeCalendarApp } from './app.js';
 
-// Initialize application when DOM is loaded
-document.addEventListener('DOMContentLoaded', () => {
-    CollaborativeCalendarApp.init();
-});
+// SPA handles initialization - removed DOMContentLoaded listener to prevent double init
 
 // Cleanup on page unload
 window.addEventListener('beforeunload', () => {

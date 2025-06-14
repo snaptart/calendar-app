@@ -10,9 +10,15 @@ export const CalendarManager = (() => {
     let calendar = null;
     
     const initializeCalendar = () => {
+        if (calendar) {
+            console.log('Calendar already initialized, skipping...');
+            return;
+        }
+        
         const calendarEl = document.getElementById('calendar');
         if (!calendarEl) return;
         
+        console.log('Creating new FullCalendar instance...');
         calendar = new FullCalendar.Calendar(calendarEl, {
             initialView: Config.calendar.defaultView,
             headerToolbar: {
@@ -102,16 +108,26 @@ export const CalendarManager = (() => {
         
         calendar.render();
     };
+
+    const destroy = () => {
+        if (calendar) {
+            calendar.destroy();
+            calendar = null;
+            console.log('FullCalendar destroyed');
+        }
+    };
     
     const addEvent = (eventData) => {
+        if (!calendar) return;
         const selectedUserIds = UserManager.getSelectedUserIds();
         if (selectedUserIds.includes(eventData.extendedProps.userId.toString())) {
-            calendar?.addEvent(eventData);
+            calendar.addEvent(eventData);
         }
     };
     
     const updateEvent = (eventData) => {
-        const event = calendar?.getEventById(eventData.id);
+        if (!calendar) return;
+        const event = calendar.getEventById(eventData.id);
         if (event) {
             event.setProp('title', eventData.title);
             event.setStart(eventData.start);
@@ -135,44 +151,48 @@ export const CalendarManager = (() => {
             // Event doesn't exist in calendar, check if we should add it
             const selectedUserIds = UserManager.getSelectedUserIds();
             if (selectedUserIds.includes(eventData.extendedProps.userId.toString())) {
-                calendar?.addEvent(eventData);
+                calendar.addEvent(eventData);
             }
         }
     };
     
     const removeEvent = (eventId) => {
-        const event = calendar?.getEventById(eventId);
+        if (!calendar) return;
+        const event = calendar.getEventById(eventId);
         event?.remove();
     };
     
     const clearAllEvents = () => {
-        calendar?.removeAllEvents();
+        if (!calendar) return;
+        calendar.removeAllEvents();
     };
     
     const loadEvents = (events) => {
+        if (!calendar || !events) return;
         clearAllEvents();
-        events.forEach(event => calendar?.addEvent(event));
+        events.forEach(event => calendar.addEvent(event));
     };
     
     // Event listeners
     EventBus.on('events:loaded', ({ events }) => {
-        loadEvents(events);
+        if (calendar) loadEvents(events);
     });
     
     EventBus.on('sse:eventCreate', ({ eventData }) => {
-        addEvent(eventData);
+        if (calendar) addEvent(eventData);
     });
     
     EventBus.on('sse:eventUpdate', ({ eventData }) => {
-        updateEvent(eventData);
+        if (calendar) updateEvent(eventData);
     });
     
     EventBus.on('sse:eventDelete', ({ eventId }) => {
-        removeEvent(eventId);
+        if (calendar) removeEvent(eventId);
     });
     
     return {
         initializeCalendar,
+        destroy,
         addEvent,
         updateEvent,
         removeEvent,

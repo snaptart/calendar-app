@@ -8,6 +8,8 @@
  * Get page content for SPA
  */
 function getSPAPageContent($page) {
+    global $pdo;
+    
     $pageFile = __DIR__ . "/../../frontend/pages/{$page}.php";
     
     if (!file_exists($pageFile)) {
