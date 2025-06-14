@@ -12,8 +12,6 @@
     box-sizing: border-box;
 }
 
-div {border: 2px solid black;}
-
 html, body {
     height: 100%;
     margin: 0;
