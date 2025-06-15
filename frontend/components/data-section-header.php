@@ -200,9 +200,73 @@ function renderEventsPageHeader() {
 }
 
 /**
+ * Predefined configuration for Programs page
+ */
+function getProgramsPageConfig() {
+    return [
+        'title' => 'Programs',
+        'description' => 'Manage skating programs and their details',
+        'filters' => [
+            [
+                'id' => 'typeFilter',
+                'label' => 'TYPE',
+                'options' => [
+                    '' => 'All Types'
+                    // Additional program types will be populated by JavaScript
+                ]
+            ],
+            [
+                'id' => 'statusFilter',
+                'label' => 'STATUS',
+                'options' => [
+                    '' => 'All Statuses',
+                    'Active' => 'Active',
+                    'Inactive' => 'Inactive'
+                ]
+            ],
+            [
+                'id' => 'facilityFilter',
+                'label' => 'FACILITY',
+                'options' => [
+                    '' => 'All Facilities'
+                    // Additional facilities will be populated by JavaScript
+                ]
+            ]
+        ],
+        'actions' => [
+            [
+                'id' => 'refreshBtn',
+                'text' => 'Refresh',
+                'class' => 'btn btn-outline-secondary',
+                'icon' => '🔄'
+            ],
+            [
+                'id' => 'exportBtn',
+                'text' => 'Export',
+                'class' => 'btn btn-outline-secondary',
+                'icon' => '📥'
+            ],
+            [
+                'id' => 'addProgramBtn',
+                'text' => 'Add Program',
+                'class' => 'btn btn-primary',
+                'icon' => '+'
+            ]
+        ]
+    ];
+}
+
+/**
  * Helper function to render Users page header
  */
 function renderUsersPageHeader() {
     renderDataSectionHeader(getUsersPageConfig());
+}
+
+/**
+ * Helper function to render Programs page header
+ */
+function renderProgramsPageHeader() {
+    renderDataSectionHeader(getProgramsPageConfig());
 }
 ?>
