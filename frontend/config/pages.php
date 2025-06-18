@@ -5,21 +5,21 @@ return [
     'calendar' => [
         'title' => 'Calendar',
         'styles' => ['components.css', 'calendar.css'],
-        'scripts' => ['calendar.js'],
+        'scripts' => [],
         'requires' => ['jquery-datetimepicker', 'fullcalendar'],
         'sidebar' => true
     ],
     'events' => [
         'title' => 'Events',
         'styles' => ['components.css', 'data-tables.css', 'table.css'],
-        'scripts' => ['events.js'],
+        'scripts' => [],
         'requires' => ['datatables'],
         'sidebar' => true
     ],
     'users' => [
         'title' => 'Users',
         'styles' => ['components.css', 'data-tables.css', 'table.css'],
-        'scripts' => ['users.js'],
+        'scripts' => [],
         'requires' => ['datatables'],
         'sidebar' => true
     ],
@@ -33,7 +33,7 @@ return [
     'import' => [
         'title' => 'Import',
         'styles' => ['components.css', 'import.css'],
-        'scripts' => ['import.js'],
+        'scripts' => [],
         'requires' => [],
         'sidebar' => true
     ]

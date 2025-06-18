@@ -102,7 +102,7 @@ class PageController {
         if (isset($config['scripts']) && is_array($config['scripts'])) {
             foreach ($config['scripts'] as $script) {
                 // Load modular scripts as ES6 modules for imports
-                if (in_array($script, ['calendar.js', 'users.js', 'import.js', 'events.js'])) {
+                if (in_array($script, [])) {
                     echo "<script type=\"module\" src=\"frontend/assets/js/{$script}\"></script>\n    ";
                 } else {
                     echo "<script src=\"frontend/assets/js/{$script}\"></script>\n    ";
